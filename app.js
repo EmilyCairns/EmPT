@@ -21,6 +21,7 @@ const state = {
   selectedId: null,    // trainer: client being viewed
   view: 'client',      // trainer: 'client' or 'library'
   library: [],         // exercise library (both roles)
+  lifting: true,       // false until the database has the lifting tables
   tab: 'workouts',
   chatChannel: null,
   inboxChannel: null,
@@ -275,6 +276,7 @@ function renderTrainerApp() {
 
 function renderClientList() {
   ui.layout.classList.toggle('has-selection', !!state.selectedId || state.view === 'library');
+  ui.libNav.hidden = !state.lifting;
   ui.libNav.replaceChildren(h('button', {
     class: 'client-item' + (state.view === 'library' ? ' active' : ''),
     onclick: () => { flushPendingSaves(); state.view = 'library'; state.selectedId = null; renderClientList(); renderPanel(); },
@@ -348,7 +350,8 @@ function renderPanel() {
     return;
   }
   const hasAccount = !!c.email;
-  const tabList = [['notes', 'Consult notes'], ['workouts', 'Workouts'], ['lifts', 'Lifts']];
+  const tabList = [['notes', 'Consult notes'], ['workouts', 'Workouts']];
+  if (state.lifting) tabList.push(['lifts', 'Lifts']);
   if (hasAccount) tabList.push(['chat', 'Chat']);
   if (!tabList.some(([key]) => key === state.tab)) state.tab = 'notes';
   if (state.tab === 'chat' && state.unread.delete(c.id)) renderClientList();
@@ -553,7 +556,7 @@ async function renderTrainerWorkouts(body, c) {
     trainerFor: c,
     ...ctx,
     actions: [
-      ...(w.is_draft ? [] : [['Log', () => openLogDialog(w, { clientId: c.id, ...ctx, asTrainer: true, onSaved: refresh })]]),
+      ...(w.is_draft || !state.lifting ? [] : [['Log', () => openLogDialog(w, { clientId: c.id, ...ctx, asTrainer: true, onSaved: refresh })]]),
       ['Edit', () => openWorkoutEditor(c, w, refresh)],
       ['Duplicate', () => openWorkoutEditor(c, { ...w, id: undefined, title: `${w.title} (copy)`, workout_date: today(), completed_at: null, is_draft: true }, refresh)],
       ...(w.is_draft ? [] : [['Unpublish', async () => {
@@ -607,8 +610,8 @@ function openWorkoutEditor(client, workout, onSaved) {
         h('div', { class: 'ex-grid' },
           mini('Sets', input('sets', 'Sets')),
           mini('Reps', input('reps', 'Reps / time')),
-          mini('% of max', input('pct', '% of max (e.g. 70)', '', { inputmode: 'decimal' })),
-          mini('Of', rmSelect),
+          state.lifting ? mini('% of max', input('pct', '% of max (e.g. 70)', '', { inputmode: 'decimal' })) : null,
+          state.lifting ? mini('Of', rmSelect) : null,
           mini('Load', input('load', 'Load (e.g. 20 kg)')),
           mini('Rest', input('rest', 'Rest (e.g. 90s)'))),
         input('notes', 'Coaching notes (optional)'));
@@ -643,7 +646,7 @@ function openWorkoutEditor(client, workout, onSaved) {
         const key = libKey(r.name);
         if (!state.library.some((x) => libKey(x.name) === key)) newNames.set(key, r.name.trim());
       }
-      if (newNames.size) {
+      if (newNames.size && state.lifting) {
         const { error: libError } = await sb.from('exercises').insert([...newNames.values()].map((name) => ({ name })));
         if (libError && libError.code !== '23505') return libError.message;
         await loadLibrary();
@@ -723,7 +726,7 @@ function workoutCard(w, { actions = [], onChange, trainerFor, maxes = [], logs =
     w.notes ? h('p', { class: 'notes' }, w.notes) : null,
     exercises.length
       ? h('ol', { class: 'exercise-list' }, exercises.map((e, i) => {
-          const target = targetFor(e, maxes);
+          const target = state.lifting ? targetFor(e, maxes) : null;
           const sets = myLogs.filter((l) => l.exercise_index === i).sort((a, b) => a.set_number - b.set_number);
           return h('li', {},
             h('span', { class: 'ex-title' }, e.name),
@@ -747,9 +750,9 @@ function renderClientApp() {
   mount(header(), h('main', { class: 'client-main' },
     h('h1', {}, 'Hi ', h('em', {}, firstName(state.me.full_name))),
     state.me.goals ? goalsBox('Your goals', state.me.goals) : null,
-    tabs([['workouts', 'My workouts'], ['lifts', 'My lifts'], ['chat', `Chat with ${TRAINER_NAME}`]], renderClientApp),
+    tabs([['workouts', 'My workouts'], state.lifting ? ['lifts', 'My lifts'] : null, ['chat', `Chat with ${TRAINER_NAME}`]].filter(Boolean), renderClientApp),
     body));
-  if (state.tab === 'workouts') renderClientWorkouts(body);
+  if (state.tab === 'workouts' || (state.tab === 'lifts' && !state.lifting)) renderClientWorkouts(body);
   else if (state.tab === 'lifts') renderLifts(body, state.me, { asTrainer: false });
   else renderChat(body, state.me.id, 'client');
 }
@@ -775,7 +778,7 @@ async function renderClientWorkouts(body) {
   const card = (w) => workoutCard(w, {
     onChange: refresh,
     ...ctx,
-    onLog: () => openLogDialog(w, { clientId: state.me.id, ...ctx, asTrainer: false, onSaved: refresh }),
+    onLog: state.lifting ? () => openLogDialog(w, { clientId: state.me.id, ...ctx, asTrainer: false, onSaved: refresh }) : null,
   });
   fill(body,
     h('h3', {}, 'Up next'),
@@ -790,9 +793,18 @@ async function renderClientWorkouts(body) {
 // Shared: exercise library, rep maxes and load maths
 // ---------------------------------------------------------------------------
 
+// Until the lifting tables exist in the database (supabase/schema.sql), the
+// library, lifts and logging features stay hidden instead of showing errors.
+const isMissingTable = (error) => ['PGRST205', '42P01', 'PGRST200'].includes(error?.code) || /does not exist|could not find the table/i.test(error?.message || '');
+
 async function loadLibrary() {
   const { data, error } = await sb.from('exercises').select('*').order('name');
-  if (error) { toast(error.message, true); return; }
+  if (error) {
+    if (isMissingTable(error)) { state.lifting = false; state.library = []; return; }
+    toast(error.message, true);
+    return;
+  }
+  state.lifting = true;
   state.library = data;
 }
 
@@ -827,6 +839,7 @@ function howTo(e) {
 
 // Everything the workout cards need besides the workouts themselves.
 async function loadTrainingData(clientId) {
+  if (!state.lifting) return { maxes: [], logs: [] };
   const [maxRes, logRes] = await Promise.all([
     sb.from('client_maxes').select('*').eq('client_id', clientId).order('tested_on', { ascending: false }),
     sb.from('set_logs').select('*').eq('client_id', clientId).order('created_at', { ascending: false }).limit(2000),

@@ -9,6 +9,9 @@
 
 html, body { margin: 0; }
 
+/* Anything marked hidden stays hidden, whatever its display style. */
+[hidden] { display: none !important; }
+
 body {
   background: var(--color-bg);
   color: var(--color-text);
