@@ -40,8 +40,10 @@ create table if not exists public.client_notes (
   updated_at   timestamptz not null default now()
 );
 
--- Workouts. "exercises" is a list of
--- { name, sets, reps, load, rest, notes } objects.
+-- Workouts. "exercises" is a list of objects with string values:
+-- { name, exercise_id, sets, reps, pct, rm, load, rest, notes }
+-- exercise_id links to the library ('' if none). pct + rm mean
+-- "pct% of the client's rm-rep max", e.g. pct '70', rm '1' = 70% of 1RM.
 create table if not exists public.workouts (
   id           uuid primary key default gen_random_uuid(),
   client_id    uuid not null references public.clients (id) on delete cascade,
@@ -61,6 +63,34 @@ create index if not exists workouts_client_date_idx on public.workouts (client_i
 alter table public.workouts add column if not exists is_draft boolean not null default false;
 alter table public.workouts alter column is_draft set default true;
 
+-- Exercise library: one row per exercise, with an optional demo video
+-- link and coaching cues. Clients can read it; only the trainer edits it.
+create table if not exists public.exercises (
+  id         uuid primary key default gen_random_uuid(),
+  name       text not null check (char_length(name) between 1 and 100),
+  video_url  text not null default '',
+  cues       text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create unique index if not exists exercises_name_key on public.exercises (lower(name));
+
+-- Rep maxes (1RM, 3RM, 5RM…) per client and exercise. Each test is a new
+-- row, so history is kept; the latest one for a rep count is "current".
+-- source: 'trainer' (entered by the trainer), 'client' (entered by the
+-- client) or 'logged' (a new best spotted in a logged workout).
+create table if not exists public.client_maxes (
+  id          uuid primary key default gen_random_uuid(),
+  client_id   uuid not null references public.clients (id) on delete cascade,
+  exercise_id uuid not null references public.exercises (id) on delete cascade,
+  reps        int not null check (reps between 1 and 20),
+  weight_kg   numeric(6, 2) not null check (weight_kg > 0 and weight_kg < 1000),
+  tested_on   date not null default current_date,
+  source      text not null default 'trainer' check (source in ('trainer', 'client', 'logged')),
+  created_at  timestamptz not null default now()
+);
+create index if not exists client_maxes_lookup_idx on public.client_maxes (client_id, exercise_id, reps, tested_on);
+
 -- Chat messages between you and each client.
 create table if not exists public.messages (
   id         bigint generated always as identity primary key,
@@ -70,6 +100,24 @@ create table if not exists public.messages (
   created_at timestamptz not null default now()
 );
 create index if not exists messages_client_created_idx on public.messages (client_id, created_at);
+
+-- What the client actually did: one row per logged set.
+-- exercise_index is the exercise's position in the workout.
+create table if not exists public.set_logs (
+  id             bigint generated always as identity primary key,
+  client_id      uuid not null references public.clients (id) on delete cascade,
+  workout_id     uuid not null references public.workouts (id) on delete cascade,
+  exercise_index int not null check (exercise_index >= 0),
+  exercise_id    uuid references public.exercises (id) on delete set null,
+  exercise_name  text not null,
+  set_number     int not null check (set_number between 1 and 50),
+  weight_kg      numeric(6, 2) check (weight_kg >= 0 and weight_kg < 1000),
+  reps           int check (reps between 0 and 1000),
+  rpe            numeric(3, 1) check (rpe between 1 and 10),
+  created_at     timestamptz not null default now()
+);
+create index if not exists set_logs_client_idx on public.set_logs (client_id, created_at);
+create index if not exists set_logs_workout_idx on public.set_logs (workout_id);
 
 -- 2. Helper functions -------------------------------------------------
 
@@ -126,6 +174,11 @@ create trigger workouts_touch_updated_at
   before update on public.workouts
   for each row execute function public.touch_updated_at();
 
+drop trigger if exists exercises_touch_updated_at on public.exercises;
+create trigger exercises_touch_updated_at
+  before update on public.exercises
+  for each row execute function public.touch_updated_at();
+
 drop trigger if exists client_notes_touch_updated_at on public.client_notes;
 create trigger client_notes_touch_updated_at
   before update on public.client_notes
@@ -158,6 +211,56 @@ alter table public.clients  enable row level security;
 alter table public.workouts enable row level security;
 alter table public.messages enable row level security;
 alter table public.client_notes enable row level security;
+alter table public.exercises enable row level security;
+alter table public.client_maxes enable row level security;
+alter table public.set_logs enable row level security;
+
+-- Exercise library: everyone signed in can read; only the trainer edits.
+drop policy if exists "exercises: read" on public.exercises;
+create policy "exercises: read" on public.exercises
+  for select to authenticated using (true);
+drop policy if exists "exercises: trainer writes" on public.exercises;
+create policy "exercises: trainer writes" on public.exercises
+  for all to authenticated
+  using (public.is_trainer()) with check (public.is_trainer());
+
+-- Rep maxes: clients see and add their own; they can remove the ones they
+-- added (or that were logged), but not ones the trainer entered.
+drop policy if exists "client_maxes: read own or trainer" on public.client_maxes;
+create policy "client_maxes: read own or trainer" on public.client_maxes
+  for select to authenticated
+  using (public.is_trainer() or client_id = public.my_client_id());
+drop policy if exists "client_maxes: add" on public.client_maxes;
+create policy "client_maxes: add" on public.client_maxes
+  for insert to authenticated
+  with check (public.is_trainer() or (client_id = public.my_client_id() and source in ('client', 'logged')));
+drop policy if exists "client_maxes: trainer edits" on public.client_maxes;
+create policy "client_maxes: trainer edits" on public.client_maxes
+  for update to authenticated
+  using (public.is_trainer()) with check (public.is_trainer());
+drop policy if exists "client_maxes: remove" on public.client_maxes;
+create policy "client_maxes: remove" on public.client_maxes
+  for delete to authenticated
+  using (public.is_trainer() or (client_id = public.my_client_id() and source <> 'trainer'));
+
+-- Logged sets: clients log against their own published workouts only.
+drop policy if exists "set_logs: read own or trainer" on public.set_logs;
+create policy "set_logs: read own or trainer" on public.set_logs
+  for select to authenticated
+  using (public.is_trainer() or client_id = public.my_client_id());
+drop policy if exists "set_logs: add" on public.set_logs;
+create policy "set_logs: add" on public.set_logs
+  for insert to authenticated
+  with check (
+    public.is_trainer()
+    or (client_id = public.my_client_id() and exists (
+      select 1 from public.workouts w
+      where w.id = workout_id and w.client_id = public.my_client_id() and not w.is_draft))
+  );
+drop policy if exists "set_logs: remove" on public.set_logs;
+create policy "set_logs: remove" on public.set_logs
+  for delete to authenticated
+  using (public.is_trainer() or client_id = public.my_client_id());
 
 drop policy if exists "client_notes: trainer only" on public.client_notes;
 create policy "client_notes: trainer only" on public.client_notes
@@ -199,8 +302,11 @@ create policy "messages: send as yourself" on public.messages
   );
 
 -- 5. Permissions ------------------------------------------------------
-revoke all on public.trainers, public.clients, public.workouts, public.messages, public.client_notes from anon, authenticated;
-grant select, insert, update, delete on public.clients, public.workouts, public.client_notes to authenticated;
+revoke all on public.trainers, public.clients, public.workouts, public.messages, public.client_notes,
+  public.exercises, public.client_maxes, public.set_logs from anon, authenticated;
+grant select, insert, update, delete on public.clients, public.workouts, public.client_notes,
+  public.exercises, public.client_maxes to authenticated;
+grant select, insert, delete on public.set_logs to authenticated;
 grant select, insert on public.messages to authenticated;
 
 revoke execute on function public.set_workout_completed(uuid, boolean) from public, anon;

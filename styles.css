@@ -116,7 +116,7 @@ p { margin: 0 0 var(--space-2); }
 
 /* ---- Form fields ------------------------------------------------------ */
 
-input, textarea {
+input, textarea, select {
   width: 100%;
   min-height: var(--control-height);
   padding: var(--space-3) var(--space-5);
@@ -131,7 +131,7 @@ input, textarea {
 }
 /* A pill can't hold several lines, so multi-line fields use the card radius. */
 textarea { border-radius: var(--radius-cards); resize: vertical; }
-input:focus, textarea:focus {
+input:focus, textarea:focus, select:focus {
   outline: none;
   border-color: var(--color-accent);
   box-shadow: 0 0 0 var(--focus-ring-width) var(--color-focus-ring);
@@ -376,7 +376,54 @@ input:focus, textarea:focus {
 .ex-row-head { display: flex; justify-content: space-between; align-items: center; }
 .ex-row-head .eyebrow { margin: 0; }
 .ex-name { font-weight: var(--weight-semibold); }
-.ex-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-2); }
+.ex-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); }
+
+/* ---- Lifting: targets, logs, how-to ----------------------------------- */
+
+.ex-target { display: block; margin-top: var(--space-1); font-size: var(--text-body-sm); font-weight: var(--weight-semibold); color: var(--color-text); }
+.ex-logged { display: block; margin-top: var(--space-1); font-size: var(--text-body-sm); color: var(--color-text-body); }
+.howto { margin-top: var(--space-2); font-size: var(--text-body-sm); }
+.howto summary { cursor: pointer; width: fit-content; font-weight: var(--weight-semibold); text-decoration: underline; text-underline-offset: var(--space-1); }
+.howto p { margin: var(--space-2) 0; white-space: pre-wrap; color: var(--color-text-body); }
+.howto .btn { margin-top: var(--space-1); }
+
+.log-ex { padding: var(--space-6) 0; border-top: var(--border-width) solid var(--color-border); }
+.log-ex:first-of-type { border-top: 0; padding-top: var(--space-2); }
+.log-ex h4, .log-ex .ex-meta, .log-ex .ex-target { margin: 0 0 var(--space-1); }
+.set-rows { display: flex; flex-direction: column; gap: var(--space-2); margin: var(--space-4) 0 var(--space-3); }
+.set-row {
+  display: grid;
+  grid-template-columns: var(--space-8) 1fr 1fr 1fr var(--control-height-sm);
+  align-items: center;
+  gap: var(--space-2);
+}
+.set-row input { min-width: 0; padding-inline: var(--space-3); text-align: center; }
+.set-head { color: var(--color-text-muted); font-size: var(--text-eyebrow); font-weight: var(--weight-semibold); text-transform: uppercase; text-align: center; }
+.set-num { text-align: center; color: var(--color-accent-text); font-weight: var(--weight-semibold); }
+
+.chips { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
+.chip {
+  padding: var(--space-1) var(--space-3);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-pills);
+  background: var(--color-surface);
+  font-size: var(--text-body-sm);
+  font-weight: var(--weight-semibold);
+}
+.chip.estimate { border-style: dashed; color: var(--color-text-muted); }
+.history-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-top: var(--border-width) solid var(--color-border);
+}
+
+.sidebar-nav { padding-top: var(--space-4); padding-bottom: 0; }
+.mini-field { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; color: var(--color-text-muted); font-size: var(--text-eyebrow); font-weight: var(--weight-semibold); text-transform: uppercase; }
+.lib-list { margin-top: var(--space-4); padding: 0; }
 
 /* ---- Chat ------------------------------------------------------------- */
 
@@ -446,6 +493,7 @@ input:focus, textarea:focus {
   .card, .dialog { padding: var(--space-6); }
   .display { font-size: var(--text-heading); line-height: var(--leading-heading); }
   .ex-grid { grid-template-columns: repeat(2, 1fr); }
+  .set-row { gap: var(--space-1); }
   .hide-narrow { display: none; }
   .hint { display: none; }
   .row-between.top { flex-direction: column; }

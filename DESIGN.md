@@ -150,7 +150,13 @@ The 64px, 80px and 88px sizes from the reference are for marketing heroes. If Em
 | **Input** | Pill, Parchment fill, 1px Ash border, padding 12px × 20px, Sans 16px Ink, Graphite placeholder. Focus: terracotta border plus a 3px soft terracotta ring. |
 | **Card** (`.card`) | Aged Paper, 24px radius, 32px padding, no border, no shadow. Don't put cards inside cards. |
 | **Workout card** | Eyebrow date, then a serif title, then Charcoal notes, then numbered exercises ("01", "02" in Terracotta Text). Completed workouts step *down* to Parchment with a Taupe outline and a mono "✓ Done" badge. |
-| **Draft workout card** (`.workout.draft`) | Trainer only. Parchment with a 1.5px **dashed** Taupe outline, a mono "Draft · not visible to …" badge, and **Publish** as its primary button in place of "Mark as done". Dashed outlines are reserved for drafts. |
+| **Target weight** (`.ex-target`) | Sans 600 14px Ink, under the prescription: "Your weight: 65 kg (70% of estimated 1RM 93.3 kg)". Always show what the number is based on, and say "estimated" when it is. |
+| **How to** (`details.howto`) | Underlined Ink "How to" toggle under an exercise. It opens the coaching cues and an outlined "Watch demo ↗" button. |
+| **Logged sets** (`.ex-logged`) | "**Logged:** 65 kg × 8 @ 7 · …" in Charcoal 14px under the exercise. |
+| **Set row** (`.set-row`) | Logging grid: terracotta set number, then kg, reps and effort pill inputs, then a remove icon. The plan shows as grey placeholder text. |
+| **Rep max chips** (`.chip`) | Parchment pills with a Taupe outline: "5RM 85 kg". An estimate uses a **dashed** outline and Graphite text. |
+| **Mini labels** (`.mini-field`) | Eyebrow-sized Graphite capitals above compact inputs, so filled-in boxes still say what they are. |
+| **Draft workout card** (`.workout.draft`) | Trainer only. Parchment with a 1.5px **dashed** Taupe outline, a mono "Draft · not visible to …" badge, and **Publish** as its primary button in place of "Mark as done". Dashed outlines are reserved for drafts and estimates. |
 | **Eyebrow** (`h3`, `.eyebrow`) | All caps, Sans 600 12px, Terracotta Text, 8–12px above what it introduces. |
 | **Goals box** (`.goals`) | Aged Paper panel with an eyebrow label. Used for the client's goals and the trainer's private injuries reminder on the Workouts tab. |
 | **Callout** (`.callout`) | Parchment with a Taupe outline: an eyebrow, one sentence and one small primary button. Used for "No account yet". |

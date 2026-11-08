@@ -1,5 +1,9 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
-import { SUPABASE_URL, SUPABASE_ANON_KEY, APP_NAME, TRAINER_NAME } from './config.js';
+import * as config from './config.js';
+
+const { SUPABASE_URL, SUPABASE_ANON_KEY, APP_NAME, TRAINER_NAME } = config;
+// Optional setting: older config.js files may not have it.
+const ROUND_TO_KG = Number(config.ROUND_TO_KG) > 0 ? Number(config.ROUND_TO_KG) : 2.5;
 
 // ---------------------------------------------------------------------------
 // Setup
@@ -15,6 +19,8 @@ const state = {
   me: null,            // client row when a client is signed in
   clients: [],         // trainer: all clients
   selectedId: null,    // trainer: client being viewed
+  view: 'client',      // trainer: 'client' or 'library'
+  library: [],         // exercise library (both roles)
   tab: 'workouts',
   chatChannel: null,
   inboxChannel: null,
@@ -207,6 +213,7 @@ async function route(session) {
   cleanupChannels();
   state.session = session;
   state.selectedId = null;
+  state.view = 'client';
   state.unread.clear();
   state.tab = 'workouts';
   if (!session) return renderLogin();
@@ -221,6 +228,7 @@ async function route(session) {
   if (meError) return renderError(meError);
   if (!me) return renderNotLinked();
   state.me = me;
+  await loadLibrary();
   renderClientApp();
 }
 
@@ -235,7 +243,7 @@ async function loadClients() {
 }
 
 async function startTrainer() {
-  await loadClients();
+  await Promise.all([loadClients(), loadLibrary()]);
   // Hear about new client messages anywhere in the app.
   state.inboxChannel = sb.channel(`inbox-${Date.now()}`)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, ({ new: m }) => {
@@ -254,6 +262,7 @@ function renderTrainerApp() {
   ui.panel = h('section', { class: 'panel' });
   ui.layout = h('div', { class: 'layout' },
     h('aside', { class: 'sidebar' },
+      ui.libNav = h('nav', { class: 'client-list sidebar-nav', 'aria-label': 'Library' }),
       h('div', { class: 'sidebar-head' },
         h('h2', { class: 'eyebrow' }, 'Clients'),
         h('button', { class: 'btn primary small', onclick: () => openClientDialog() }, '+ New client')),
@@ -265,7 +274,13 @@ function renderTrainerApp() {
 }
 
 function renderClientList() {
-  ui.layout.classList.toggle('has-selection', !!state.selectedId);
+  ui.layout.classList.toggle('has-selection', !!state.selectedId || state.view === 'library');
+  ui.libNav.replaceChildren(h('button', {
+    class: 'client-item' + (state.view === 'library' ? ' active' : ''),
+    onclick: () => { flushPendingSaves(); state.view = 'library'; state.selectedId = null; renderClientList(); renderPanel(); },
+  },
+    h('span', { class: 'client-name' }, 'Exercise library'),
+    h('span', { class: 'muted small' }, `${state.library.length} exercise${state.library.length === 1 ? '' : 's'}`)));
   if (!state.clients.length) {
     ui.list.replaceChildren(h('p', { class: 'muted pad' }, 'No clients yet. Tap "+ New client" to start their consult notes.'));
     return;
@@ -281,6 +296,7 @@ function renderClientList() {
 
 function selectClient(id) {
   const c = state.clients.find((x) => x.id === id);
+  state.view = 'client';
   state.selectedId = id;
   state.tab = state.unread.has(id) ? 'chat' : c?.email ? 'workouts' : 'notes';
   renderClientList();
@@ -325,13 +341,14 @@ function autosaver(save, statusEl) {
 function renderPanel() {
   closeChat();
   flushPendingSaves();
+  if (state.view === 'library') return renderLibraryPanel();
   const c = state.clients.find((x) => x.id === state.selectedId);
   if (!c) {
     ui.panel.replaceChildren(h('div', { class: 'empty' }, h('p', { class: 'muted' }, 'Choose a client to see their notes, workouts and chat.')));
     return;
   }
   const hasAccount = !!c.email;
-  const tabList = [['notes', 'Consult notes'], ['workouts', 'Workouts']];
+  const tabList = [['notes', 'Consult notes'], ['workouts', 'Workouts'], ['lifts', 'Lifts']];
   if (hasAccount) tabList.push(['chat', 'Chat']);
   if (!tabList.some(([key]) => key === state.tab)) state.tab = 'notes';
   if (state.tab === 'chat' && state.unread.delete(c.id)) renderClientList();
@@ -357,6 +374,7 @@ function renderPanel() {
 
   if (state.tab === 'notes') renderConsultNotes(body, c);
   else if (state.tab === 'workouts') renderTrainerWorkouts(body, c);
+  else if (state.tab === 'lifts') renderLifts(body, c, { asTrainer: true });
   else renderChat(body, c.id, 'trainer');
 }
 
@@ -505,9 +523,12 @@ async function renderTrainerWorkouts(body, c) {
     if (data?.injuries?.trim() && reminder.isConnected) reminder.replaceWith(goalsBox('Injuries and conditions · private', data.injuries.trim()));
   });
 
-  const { data, error } = await sb.from('workouts').select('*').eq('client_id', c.id)
-    .order('workout_date', { ascending: false, nullsFirst: true })
-    .order('created_at', { ascending: false });
+  const [{ data, error }, ctx] = await Promise.all([
+    sb.from('workouts').select('*').eq('client_id', c.id)
+      .order('workout_date', { ascending: false, nullsFirst: true })
+      .order('created_at', { ascending: false }),
+    loadTrainingData(c.id),
+  ]);
   if (!list.isConnected) return;
   if (error) { list.replaceChildren(h('p', { class: 'error' }, error.message)); return; }
   if (!data.length) {
@@ -530,7 +551,9 @@ async function renderTrainerWorkouts(body, c) {
   list.replaceChildren(...data.map((w) => workoutCard(w, {
     onChange: refresh,
     trainerFor: c,
+    ...ctx,
     actions: [
+      ...(w.is_draft ? [] : [['Log', () => openLogDialog(w, { clientId: c.id, ...ctx, asTrainer: true, onSaved: refresh })]]),
       ['Edit', () => openWorkoutEditor(c, w, refresh)],
       ['Duplicate', () => openWorkoutEditor(c, { ...w, id: undefined, title: `${w.title} (copy)`, workout_date: today(), completed_at: null, is_draft: true }, refresh)],
       ...(w.is_draft ? [] : [['Unpublish', async () => {
@@ -550,7 +573,8 @@ async function renderTrainerWorkouts(body, c) {
   })));
 }
 
-const blankExercise = () => ({ name: '', sets: '', reps: '', load: '', rest: '', notes: '' });
+const blankExercise = () => ({ name: '', exercise_id: '', sets: '', reps: '', pct: '', rm: '1', load: '', rest: '', notes: '' });
+const RM_CHOICES = [1, 2, 3, 4, 5, 6, 8, 10];
 
 function openWorkoutEditor(client, workout, onSaved) {
   const isNew = !workout?.id;
@@ -566,8 +590,12 @@ function openWorkoutEditor(client, workout, onSaved) {
 
   function drawRows() {
     exList.replaceChildren(...rows.map((r, i) => {
-      const input = (key, placeholder, cls) =>
-        h('input', { value: r[key] || '', placeholder, 'aria-label': placeholder, class: cls, oninput: (e) => { r[key] = e.target.value; } });
+      const input = (key, placeholder, cls, extra = {}) =>
+        h('input', { value: r[key] || '', placeholder, 'aria-label': placeholder, class: cls, oninput: (e) => { r[key] = e.target.value; }, ...extra });
+      // Small visible labels, so filled-in boxes still say what they are.
+      const mini = (label, control) => h('label', { class: 'mini-field' }, h('span', { 'aria-hidden': 'true' }, label), control);
+      const rmSelect = h('select', { 'aria-label': 'Percentage of which rep max', onchange: (e) => { r.rm = e.target.value; } },
+        RM_CHOICES.map((n) => h('option', { value: String(n), selected: String(r.rm || '1') === String(n) }, `of ${n}RM`)));
       return h('div', { class: 'ex-row' },
         h('div', { class: 'ex-row-head' },
           h('span', { class: 'eyebrow' }, `Exercise ${String(i + 1).padStart(2, '0')}`),
@@ -575,12 +603,14 @@ function openWorkoutEditor(client, workout, onSaved) {
             iconBtn('Move up', '↑', i === 0, () => { [rows[i - 1], rows[i]] = [rows[i], rows[i - 1]]; drawRows(); }),
             iconBtn('Move down', '↓', i === rows.length - 1, () => { [rows[i + 1], rows[i]] = [rows[i], rows[i + 1]]; drawRows(); }),
             iconBtn('Remove exercise', '✕', false, () => { rows.splice(i, 1); drawRows(); }))),
-        input('name', 'Exercise name', 'ex-name'),
+        input('name', 'Exercise name', 'ex-name', { list: 'library-names', autocomplete: 'off' }),
         h('div', { class: 'ex-grid' },
-          input('sets', 'Sets'),
-          input('reps', 'Reps / time'),
-          input('load', 'Load (e.g. 20 kg)'),
-          input('rest', 'Rest (e.g. 90s)')),
+          mini('Sets', input('sets', 'Sets')),
+          mini('Reps', input('reps', 'Reps / time')),
+          mini('% of max', input('pct', '% of max (e.g. 70)', '', { inputmode: 'decimal' })),
+          mini('Of', rmSelect),
+          mini('Load', input('load', 'Load (e.g. 20 kg)')),
+          mini('Rest', input('rest', 'Rest (e.g. 90s)'))),
         input('notes', 'Coaching notes (optional)'));
     }));
   }
@@ -595,13 +625,35 @@ function openWorkoutEditor(client, workout, onSaved) {
       field('Title', title),
       field('Date', date, 'Leave empty for a workout they can do any time.'),
       field('Notes', notes),
-      h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Exercises'), exList,
+      libraryDatalist(),
+      h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Exercises'),
+        h('span', { class: 'muted small' }, 'Pick from your library or type a new name (new names are added to the library). For a percentage, fill in "% of max" and choose which rep max; the client sees the weight worked out for them.'),
+        exList,
         h('button', { type: 'button', class: 'btn', onclick: () => { rows.push(blankExercise()); drawRows(); exList.lastChild?.querySelector('input')?.focus(); } }, '+ Add exercise')),
     ],
     onSubmit: async (action) => {
-      const exercises = rows
-        .filter((r) => r.name.trim())
-        .map((r) => Object.fromEntries(Object.keys(blankExercise()).map((k) => [k, String(r[k] || '').trim()])));
+      const named = rows.filter((r) => r.name.trim());
+      for (const r of named) {
+        const pct = String(r.pct || '').trim();
+        if (pct && !(Number(pct) > 0 && Number(pct) <= 150)) return `"${r.name.trim()}": the percentage should be a number such as 70.`;
+      }
+      // New exercise names join the library, so it builds itself as you write.
+      const newNames = new Map();
+      for (const r of named) {
+        const key = libKey(r.name);
+        if (!state.library.some((x) => libKey(x.name) === key)) newNames.set(key, r.name.trim());
+      }
+      if (newNames.size) {
+        const { error: libError } = await sb.from('exercises').insert([...newNames.values()].map((name) => ({ name })));
+        if (libError && libError.code !== '23505') return libError.message;
+        await loadLibrary();
+      }
+      const exercises = named.map((r) => {
+        const clean = Object.fromEntries(Object.keys(blankExercise()).map((k) => [k, String(r[k] || '').trim()]));
+        clean.exercise_id = findLib({ name: clean.name })?.id || '';
+        clean.rm = clean.pct ? clean.rm || '1' : '';
+        return clean;
+      });
       const payload = {
         client_id: client.id,
         title: title.value.trim(),
@@ -626,19 +678,17 @@ function openWorkoutEditor(client, workout, onSaved) {
 // Shared: workout card
 // ---------------------------------------------------------------------------
 
-function workoutCard(w, { actions = [], onChange, trainerFor }) {
+function workoutCard(w, { actions = [], onChange, trainerFor, maxes = [], logs = [], onLog }) {
   const exercises = Array.isArray(w.exercises) ? w.exercises : [];
   const done = !!w.completed_at;
   const draft = !!w.is_draft;
-  const meta = (e) => [
-    e.sets && `${e.sets} sets`,
-    e.reps && `${e.reps} reps`,
-    e.load,
-    e.rest && `rest ${e.rest}`,
-  ].filter(Boolean).join(' · ');
+  const myLogs = logs.filter((l) => l.workout_id === w.id);
+  const hasLogs = myLogs.length > 0;
+  const who = trainerFor ? firstName(trainerFor.full_name) : null;
 
+  const logBtn = onLog && !draft ? h('button', { class: 'btn' + (!done && !hasLogs ? ' primary' : done ? ' ghost' : ''), onclick: onLog }, hasLogs ? 'Edit log' : 'Log workout') : null;
   const toggle = h('button', {
-    class: 'btn' + (done ? '' : ' primary'),
+    class: 'btn' + (done || (onLog && !hasLogs) ? '' : ' primary'),
     onclick: async () => {
       toggle.disabled = true;
       const { error } = await sb.rpc('set_workout_completed', { p_workout_id: w.id, p_done: !done });
@@ -672,13 +722,19 @@ function workoutCard(w, { actions = [], onChange, trainerFor }) {
         actions.map(([label, fn]) => h('button', { class: 'btn ghost small' + (label === 'Delete' ? ' danger-text' : ''), onclick: fn }, label))) : null),
     w.notes ? h('p', { class: 'notes' }, w.notes) : null,
     exercises.length
-      ? h('ol', { class: 'exercise-list' }, exercises.map((e) =>
-          h('li', {},
+      ? h('ol', { class: 'exercise-list' }, exercises.map((e, i) => {
+          const target = targetFor(e, maxes);
+          const sets = myLogs.filter((l) => l.exercise_index === i).sort((a, b) => a.set_number - b.set_number);
+          return h('li', {},
             h('span', { class: 'ex-title' }, e.name),
-            meta(e) ? h('span', { class: 'ex-meta' }, meta(e)) : null,
-            e.notes ? h('span', { class: 'ex-notes' }, e.notes) : null)))
+            prescription(e) ? h('span', { class: 'ex-meta' }, prescription(e)) : null,
+            target ? h('span', { class: 'ex-target' }, targetText(target, who)) : null,
+            e.notes ? h('span', { class: 'ex-notes' }, e.notes) : null,
+            sets.length ? h('span', { class: 'ex-logged' }, h('strong', {}, 'Logged: '), sets.map(setText).join(' · ')) : null,
+            howTo(e));
+        }))
       : h('p', { class: 'muted small' }, 'No exercises listed.'),
-    h('div', { class: 'row-end' }, draft ? publish : toggle));
+    h('div', { class: 'row-end actions' }, draft ? publish : [logBtn, toggle]));
 }
 
 // ---------------------------------------------------------------------------
@@ -691,17 +747,21 @@ function renderClientApp() {
   mount(header(), h('main', { class: 'client-main' },
     h('h1', {}, 'Hi ', h('em', {}, firstName(state.me.full_name))),
     state.me.goals ? goalsBox('Your goals', state.me.goals) : null,
-    tabs([['workouts', 'My workouts'], ['chat', `Chat with ${TRAINER_NAME}`]], renderClientApp),
+    tabs([['workouts', 'My workouts'], ['lifts', 'My lifts'], ['chat', `Chat with ${TRAINER_NAME}`]], renderClientApp),
     body));
   if (state.tab === 'workouts') renderClientWorkouts(body);
+  else if (state.tab === 'lifts') renderLifts(body, state.me, { asTrainer: false });
   else renderChat(body, state.me.id, 'client');
 }
 
 async function renderClientWorkouts(body) {
   body.replaceChildren(h('p', { class: 'muted' }, 'Loading…'));
-  const { data, error } = await sb.from('workouts').select('*').eq('client_id', state.me.id).eq('is_draft', false)
-    .order('workout_date', { ascending: true, nullsFirst: true })
-    .order('created_at', { ascending: true });
+  const [{ data, error }, ctx] = await Promise.all([
+    sb.from('workouts').select('*').eq('client_id', state.me.id).eq('is_draft', false)
+      .order('workout_date', { ascending: true, nullsFirst: true })
+      .order('created_at', { ascending: true }),
+    loadTrainingData(state.me.id),
+  ]);
   if (!body.isConnected) return;
   if (error) { body.replaceChildren(h('p', { class: 'error' }, error.message)); return; }
   if (!data.length) {
@@ -712,13 +772,416 @@ async function renderClientWorkouts(body) {
   const upcoming = data.filter((w) => !w.completed_at && (!w.workout_date || w.workout_date >= now));
   const past = data.filter((w) => !upcoming.includes(w)).reverse();
   const refresh = () => renderClientWorkouts(body);
+  const card = (w) => workoutCard(w, {
+    onChange: refresh,
+    ...ctx,
+    onLog: () => openLogDialog(w, { clientId: state.me.id, ...ctx, asTrainer: false, onSaved: refresh }),
+  });
   fill(body,
     h('h3', {}, 'Up next'),
     upcoming.length
-      ? h('div', { class: 'stack' }, upcoming.map((w) => workoutCard(w, { onChange: refresh })))
+      ? h('div', { class: 'stack' }, upcoming.map(card))
       : h('p', { class: 'muted' }, "You're all caught up."),
     past.length ? h('h3', {}, 'Past and completed') : null,
-    past.length ? h('div', { class: 'stack' }, past.map((w) => workoutCard(w, { onChange: refresh }))) : null);
+    past.length ? h('div', { class: 'stack' }, past.map(card)) : null);
+}
+
+// ---------------------------------------------------------------------------
+// Shared: exercise library, rep maxes and load maths
+// ---------------------------------------------------------------------------
+
+async function loadLibrary() {
+  const { data, error } = await sb.from('exercises').select('*').order('name');
+  if (error) { toast(error.message, true); return; }
+  state.library = data;
+}
+
+const libKey = (name) => String(name || '').trim().toLowerCase();
+// Finds the library entry for a workout exercise: by id, else by name.
+function findLib(e) {
+  return state.library.find((x) => e.exercise_id && x.id === e.exercise_id)
+    || state.library.find((x) => libKey(x.name) === libKey(e.name))
+    || null;
+}
+const libraryDatalist = () => h('datalist', { id: 'library-names' }, state.library.map((x) => h('option', { value: x.name })));
+
+// Only http(s) links are ever turned into clickable links.
+function safeUrl(url) {
+  try {
+    const u = new URL(String(url || '').trim());
+    return u.protocol === 'https:' || u.protocol === 'http:' ? u.href : null;
+  } catch {
+    return null;
+  }
+}
+
+function howTo(e) {
+  const lib = findLib(e);
+  const video = safeUrl(lib?.video_url);
+  if (!lib || (!lib.cues && !video)) return null;
+  return h('details', { class: 'howto' },
+    h('summary', {}, 'How to'),
+    lib.cues ? h('p', {}, lib.cues) : null,
+    video ? h('a', { class: 'btn small', href: video, target: '_blank', rel: 'noopener noreferrer' }, 'Watch demo ↗') : null);
+}
+
+// Everything the workout cards need besides the workouts themselves.
+async function loadTrainingData(clientId) {
+  const [maxRes, logRes] = await Promise.all([
+    sb.from('client_maxes').select('*').eq('client_id', clientId).order('tested_on', { ascending: false }),
+    sb.from('set_logs').select('*').eq('client_id', clientId).order('created_at', { ascending: false }).limit(2000),
+  ]);
+  if (maxRes.error) toast(maxRes.error.message, true);
+  if (logRes.error) toast(logRes.error.message, true);
+  return { maxes: maxRes.data || [], logs: logRes.data || [] };
+}
+
+// Load maths. Weights are rounded to ROUND_TO_KG (set in config.js) so they
+// can be loaded with real plates. Missing maxes are estimated from other rep
+// maxes with the Epley formula: 1RM = weight × (1 + reps ÷ 30).
+const roundLoad = (kg) => Math.round(kg / ROUND_TO_KG) * ROUND_TO_KG;
+const kg = (n) => `${Number(Number(n).toFixed(2))} kg`;
+const epley1rm = (weight, reps) => (reps <= 1 ? weight : weight * (1 + reps / 30));
+const epleyRm = (oneRm, reps) => (reps <= 1 ? oneRm : oneRm / (1 + reps / 30));
+
+// The current (most recent) max for each rep count of one exercise.
+function latestMaxes(maxes, exerciseId) {
+  const latest = new Map();
+  for (const m of maxes) {
+    if (m.exercise_id !== exerciseId) continue;
+    const cur = latest.get(m.reps);
+    if (!cur || m.tested_on > cur.tested_on || (m.tested_on === cur.tested_on && m.created_at > cur.created_at)) latest.set(m.reps, m);
+  }
+  return latest;
+}
+const bestE1rm = (latest) => Math.max(0, ...[...latest.values()].map((m) => epley1rm(Number(m.weight_kg), m.reps)));
+
+// For "70% of 1RM" style prescriptions: the weight to lift.
+function targetFor(e, maxes) {
+  const pct = Number(e.pct);
+  if (!(pct > 0)) return null;
+  const rm = parseInt(e.rm, 10) || 1;
+  const lib = findLib(e);
+  const latest = lib ? latestMaxes(maxes, lib.id) : new Map();
+  const exact = latest.get(rm);
+  if (exact) return { pct, rm, base: Number(exact.weight_kg), estimated: false, kg: roundLoad((Number(exact.weight_kg) * pct) / 100) };
+  const one = bestE1rm(latest);
+  if (!one) return { pct, rm, missing: true };
+  const base = epleyRm(one, rm);
+  return { pct, rm, base, estimated: true, kg: roundLoad((base * pct) / 100) };
+}
+
+function prescription(e) {
+  return [
+    e.sets && `${e.sets} sets`,
+    e.reps && `${e.reps} reps`,
+    Number(e.pct) > 0 && `${e.pct}% of ${parseInt(e.rm, 10) || 1}RM`,
+    e.load,
+    e.rest && `rest ${e.rest}`,
+  ].filter(Boolean).join(' · ');
+}
+
+// who = client's first name when the trainer is looking, null for the client.
+function targetText(t, who) {
+  if (t.missing) return who ? `No ${t.rm}RM recorded for ${who} yet` : `Add your ${t.rm}RM in My lifts to see your weight`;
+  const basis = `${t.estimated ? 'estimated ' : ''}${t.rm}RM ${kg(Math.round(t.base * 10) / 10)}`;
+  return `${who ? `${who}: ` : 'Your weight: '}${kg(t.kg)} (${t.pct}% of ${basis})`;
+}
+
+const setText = (l) => [l.weight_kg != null ? kg(l.weight_kg) : null, l.reps != null ? `× ${l.reps}` : null].filter(Boolean).join(' ')
+  + (l.rpe != null ? ` @ ${Number(l.rpe)}` : '');
+
+const SOURCE_LABEL = { trainer: `Set by ${TRAINER_NAME}`, client: 'Added by you', logged: 'From a workout' };
+
+// ---------------------------------------------------------------------------
+// Shared: logging a workout
+// ---------------------------------------------------------------------------
+
+function openLogDialog(w, { clientId, maxes, logs, asTrainer, onSaved }) {
+  const exercises = Array.isArray(w.exercises) ? w.exercises : [];
+  const done = !!w.completed_at;
+  const existing = logs.filter((l) => l.workout_id === w.id);
+
+  // The most recent other workout in which this exercise was logged.
+  const previousFor = (e) => {
+    const lib = findLib(e);
+    const same = logs.filter((l) => l.workout_id !== w.id
+      && ((lib && l.exercise_id === lib.id) || libKey(l.exercise_name) === libKey(e.name)));
+    if (!same.length) return null;
+    const newest = same.reduce((a, b) => (a.created_at > b.created_at ? a : b));
+    return same.filter((l) => l.workout_id === newest.workout_id).sort((a, b) => a.set_number - b.set_number);
+  };
+
+  const blocks = exercises.map((e, i) => {
+    const target = targetFor(e, maxes);
+    const previous = previousFor(e);
+    const planKg = target && !target.missing ? target.kg : previous?.at(-1)?.weight_kg ?? '';
+    const planReps = Number.isFinite(parseInt(e.reps, 10)) ? parseInt(e.reps, 10) : '';
+    const logged = existing.filter((l) => l.exercise_index === i).sort((a, b) => a.set_number - b.set_number);
+    const rows = logged.length
+      ? logged.map((l) => ({ weight: l.weight_kg ?? '', reps: l.reps ?? '', rpe: l.rpe ?? '' }))
+      : Array.from({ length: Math.min(Math.max(parseInt(e.sets, 10) || 1, 1), 10) }, () => ({ weight: '', reps: '', rpe: '' }));
+
+    const setsEl = h('div', { class: 'set-rows' });
+    const num = (r, key, placeholder, step, label) => h('input', {
+      type: 'number', inputmode: 'decimal', min: '0', step, value: r[key], placeholder: String(placeholder), 'aria-label': label,
+      oninput: (ev) => { r[key] = ev.target.value; },
+    });
+    const draw = () => setsEl.replaceChildren(
+      h('div', { class: 'set-row set-head', 'aria-hidden': 'true' }, h('span', {}, 'Set'), h('span', {}, 'kg'), h('span', {}, 'Reps'), h('span', {}, 'Effort'), h('span')),
+      ...rows.map((r, j) => h('div', { class: 'set-row' },
+        h('span', { class: 'set-num' }, String(j + 1)),
+        num(r, 'weight', planKg, '0.5', `${e.name} set ${j + 1} weight in kg`),
+        num(r, 'reps', planReps, '1', `${e.name} set ${j + 1} reps`),
+        num(r, 'rpe', '1–10', '0.5', `${e.name} set ${j + 1} effort out of 10`),
+        h('button', { type: 'button', class: 'btn icon', 'aria-label': `Remove set ${j + 1}`, title: 'Remove set', onclick: () => { rows.splice(j, 1); draw(); } }, '✕'))));
+    draw();
+
+    const el = h('section', { class: 'log-ex' },
+      h('p', { class: 'eyebrow' }, String(i + 1).padStart(2, '0')),
+      h('h4', {}, e.name),
+      prescription(e) ? h('p', { class: 'ex-meta' }, prescription(e)) : null,
+      target ? h('p', { class: 'ex-target' }, targetText(target, asTrainer ? 'Target' : null)) : null,
+      previous ? h('p', { class: 'muted small' }, `Last time: ${previous.map(setText).join(' · ')}`) : null,
+      setsEl,
+      h('div', { class: 'actions' },
+        h('button', { type: 'button', class: 'btn small', onclick: () => { rows.push({ weight: rows.at(-1)?.weight ?? '', reps: '', rpe: '' }); draw(); } }, '+ Add set'),
+        planKg !== '' || planReps !== '' ? h('button', {
+          type: 'button', class: 'btn ghost small',
+          onclick: () => { for (const r of rows) { if (r.weight === '') r.weight = planKg; if (r.reps === '') r.reps = planReps; } draw(); },
+        }, 'Fill in the plan') : null));
+    return { e, i, rows, el };
+  });
+
+  openDialog({
+    title: w.title,
+    wide: true,
+    submitLabel: done ? 'Save' : 'Save and mark as done',
+    altSubmitLabel: done ? null : 'Save',
+    fields: [
+      h('p', { class: 'muted small' }, 'Enter what you actually lifted. Empty sets are skipped. Effort is how hard it felt out of 10 (10 = nothing left). Grey numbers are the plan.'),
+      exercises.length ? blocks.map((b) => b.el) : h('p', { class: 'muted' }, 'This workout has no exercises to log.'),
+    ],
+    onSubmit: async (action) => {
+      const rowsToSave = [];
+      for (const b of blocks) {
+        const lib = findLib(b.e);
+        let n = 0;
+        for (const r of b.rows) {
+          const weight = r.weight === '' ? null : Number(r.weight);
+          const reps = r.reps === '' ? null : parseInt(r.reps, 10);
+          const rpe = r.rpe === '' ? null : Number(r.rpe);
+          if (weight == null && reps == null) continue;
+          if (rpe != null && !(rpe >= 1 && rpe <= 10)) return `${b.e.name}: effort should be between 1 and 10.`;
+          if (weight != null && !(weight >= 0 && weight < 1000)) return `${b.e.name}: check the weight.`;
+          rowsToSave.push({
+            client_id: clientId, workout_id: w.id, exercise_index: b.i, exercise_id: lib?.id ?? null,
+            exercise_name: b.e.name, set_number: ++n, weight_kg: weight, reps, rpe,
+          });
+        }
+      }
+      const { error: delError } = await sb.from('set_logs').delete().eq('workout_id', w.id).eq('client_id', clientId);
+      if (delError) return delError.message;
+      if (rowsToSave.length) {
+        const { error: insError } = await sb.from('set_logs').insert(rowsToSave);
+        if (insError) return insError.message;
+      }
+      const prs = await recordNewBests(rowsToSave, maxes, clientId);
+      if (action === 'primary' && !done) {
+        const { error: doneError } = await sb.rpc('set_workout_completed', { p_workout_id: w.id, p_done: true });
+        if (doneError) toast(doneError.message, true);
+      }
+      toast(prs.length
+        ? `New best! ${prs.map((p) => `${p.name} ${p.reps}RM ${kg(p.weight)}`).join(', ')}`
+        : asTrainer ? 'Log saved.' : action === 'primary' && !done ? 'Nice work! Workout logged and marked as done.' : 'Log saved.');
+      onSaved();
+    },
+  });
+}
+
+// A logged set counts as a new best when it beats the strongest current max
+// for that exercise (compared as an estimated 1RM). It is then saved as a
+// rep max for its rep count. Exercises with no maxes yet are skipped, so
+// ordinary working sets never turn into "maxes".
+async function recordNewBests(rows, maxes, clientId) {
+  const best = new Map();
+  for (const r of rows) {
+    if (!r.exercise_id || !(r.weight_kg > 0) || !(r.reps >= 1 && r.reps <= 10)) continue;
+    const latest = latestMaxes(maxes, r.exercise_id);
+    const current = bestE1rm(latest);
+    if (!current || epley1rm(r.weight_kg, r.reps) <= current + 1e-9) continue;
+    const key = `${r.exercise_id}:${r.reps}`;
+    const sameReps = latest.get(r.reps);
+    if (sameReps && r.weight_kg <= Number(sameReps.weight_kg)) continue;
+    if (!best.has(key) || r.weight_kg > best.get(key).weight) best.set(key, { exercise_id: r.exercise_id, name: r.exercise_name, reps: r.reps, weight: r.weight_kg });
+  }
+  if (!best.size) return [];
+  const { error } = await sb.from('client_maxes').insert([...best.values()].map((b) => ({
+    client_id: clientId, exercise_id: b.exercise_id, reps: b.reps, weight_kg: b.weight, tested_on: today(), source: 'logged',
+  })));
+  if (error) { toast(error.message, true); return []; }
+  return [...best.values()];
+}
+
+// ---------------------------------------------------------------------------
+// Shared: lifts (rep maxes)
+// ---------------------------------------------------------------------------
+
+async function renderLifts(body, c, { asTrainer }) {
+  body.replaceChildren(h('p', { class: 'muted' }, 'Loading…'));
+  const { data, error } = await sb.from('client_maxes').select('*').eq('client_id', c.id)
+    .order('tested_on', { ascending: false }).order('created_at', { ascending: false });
+  if (!body.isConnected) return;
+  if (error) { body.replaceChildren(h('p', { class: 'error' }, error.message)); return; }
+  const refresh = () => renderLifts(body, c, { asTrainer });
+  const first = firstName(c.full_name);
+
+  const byExercise = new Map();
+  for (const m of data) {
+    if (!byExercise.has(m.exercise_id)) byExercise.set(m.exercise_id, []);
+    byExercise.get(m.exercise_id).push(m);
+  }
+  const nameOf = (id) => state.library.find((x) => x.id === id)?.name || 'Exercise';
+  const cards = [...byExercise.entries()]
+    .sort(([a], [b]) => nameOf(a).localeCompare(nameOf(b)))
+    .map(([exerciseId, rows]) => {
+      const latest = latestMaxes(rows, exerciseId);
+      const chips = [...latest.values()].sort((a, b) => a.reps - b.reps)
+        .map((m) => h('span', { class: 'chip' }, `${m.reps}RM ${kg(m.weight_kg)}`));
+      if (!latest.has(1)) chips.unshift(h('span', { class: 'chip estimate' }, `Est. 1RM ${kg(Math.round(bestE1rm(latest) * 10) / 10)}`));
+      return h('article', { class: 'card' },
+        h('h4', {}, nameOf(exerciseId)),
+        h('div', { class: 'chips' }, chips),
+        h('details', { class: 'howto' },
+          h('summary', {}, `History (${rows.length})`),
+          rows.map((m) => h('div', { class: 'history-row' },
+            h('span', {}, `${formatDate(m.tested_on)} · ${m.reps}RM ${kg(m.weight_kg)}`),
+            h('span', { class: 'muted small' }, asTrainer ? { trainer: 'Set by you', client: `Added by ${first}`, logged: 'From a workout' }[m.source] : SOURCE_LABEL[m.source]),
+            asTrainer || m.source !== 'trainer' ? h('button', {
+              class: 'btn ghost small danger-text',
+              onclick: async () => {
+                if (!confirm(`Remove this ${m.reps}RM (${kg(m.weight_kg)})?`)) return;
+                const { error: delError } = await sb.from('client_maxes').delete().eq('id', m.id);
+                if (delError) return toast(delError.message, true);
+                refresh();
+              },
+            }, 'Remove') : null))));
+    });
+
+  fill(body,
+    h('div', { class: 'row-between' },
+      h('h3', {}, 'Rep maxes'),
+      h('button', { class: 'btn primary', onclick: () => openMaxDialog(c, { asTrainer, onSaved: refresh }) }, '+ Add a max')),
+    h('p', { class: 'muted small' }, asTrainer
+      ? `Record ${first}'s 1RM, 3RM, 5RM and so on. Workouts prescribed as a % of a max show ${first} the weight to use. New bests ${first} logs are added automatically.`
+      : `Your best lifts. When ${TRAINER_NAME} sets a weight as a % of one of these, the app works out the weight for you. New bests you log are added automatically.`),
+    cards.length ? h('div', { class: 'stack' }, cards) : h('p', { class: 'muted' }, 'No maxes recorded yet.'));
+}
+
+function openMaxDialog(c, { asTrainer, onSaved }) {
+  const exercise = h('input', { required: true, list: 'library-names', autocomplete: 'off', placeholder: 'e.g. Back squat' });
+  const reps = h('select', {}, RM_CHOICES.map((n) => h('option', { value: String(n) }, n === 1 ? '1RM (one rep max)' : `${n}RM (${n} rep max)`)));
+  const weight = h('input', { type: 'number', inputmode: 'decimal', min: '0.5', step: '0.5', required: true, placeholder: 'e.g. 80' });
+  const date = h('input', { type: 'date', value: today(), required: true });
+  openDialog({
+    title: 'Add a max',
+    submitLabel: 'Save',
+    fields: [libraryDatalist(), field('Exercise', exercise), field('Rep max', reps), field('Weight (kg)', weight), field('Date', date)],
+    onSubmit: async () => {
+      let lib = findLib({ name: exercise.value });
+      if (!lib) {
+        if (!asTrainer) return `Choose an exercise from the list. Ask ${TRAINER_NAME} to add it if it isn't there.`;
+        const { error: libError } = await sb.from('exercises').insert({ name: exercise.value.trim() });
+        if (libError && libError.code !== '23505') return libError.message;
+        await loadLibrary();
+        lib = findLib({ name: exercise.value });
+        if (!lib) return 'Could not add that exercise to the library.';
+      }
+      const value = Number(weight.value);
+      if (!(value > 0 && value < 1000)) return 'Enter the weight in kg.';
+      const { error } = await sb.from('client_maxes').insert({
+        client_id: c.id, exercise_id: lib.id, reps: Number(reps.value), weight_kg: value, tested_on: date.value,
+        source: asTrainer ? 'trainer' : 'client',
+      });
+      if (error) return error.message;
+      toast(`${lib.name} ${reps.value}RM saved.`);
+      onSaved();
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Trainer: exercise library
+// ---------------------------------------------------------------------------
+
+function renderLibraryPanel() {
+  const search = h('input', { type: 'search', placeholder: 'Search exercises', 'aria-label': 'Search exercises' });
+  const list = h('nav', { class: 'client-list lib-list', 'aria-label': 'Exercises' });
+  const draw = () => {
+    const q = libKey(search.value);
+    const items = state.library.filter((x) => libKey(x.name).includes(q));
+    fill(list, items.length
+      ? items.map((x) => h('button', { class: 'client-item', onclick: () => openExerciseDialog(x) },
+          h('span', { class: 'client-name' }, x.name),
+          h('span', { class: 'muted small' }, [safeUrl(x.video_url) ? 'Demo video' : null, x.cues ? 'Coaching cues' : null].filter(Boolean).join(' · ') || 'No video or cues yet')))
+      : h('p', { class: 'muted pad' }, state.library.length
+          ? 'No matches.'
+          : 'Your library is empty. Add exercises here, or just type new exercise names when you write a workout: they are added automatically.'));
+  };
+  search.addEventListener('input', draw);
+  fill(ui.panel,
+    h('div', { class: 'panel-head' },
+      h('button', { class: 'btn ghost small back', onclick: () => { state.view = 'client'; renderClientList(); renderPanel(); } }, '← Clients'),
+      h('div', { class: 'panel-title' },
+        h('h2', {}, 'Exercise library'),
+        h('p', { class: 'muted small' }, 'Add a demo video link and coaching cues. Clients see them under "How to" on each exercise.')),
+      h('button', { class: 'btn primary small', onclick: () => openExerciseDialog() }, '+ Add exercise')),
+    search,
+    list);
+  draw();
+}
+
+function openExerciseDialog(x) {
+  const name = h('input', { required: true, maxlength: '100', value: x?.name || '', placeholder: 'e.g. Romanian deadlift' });
+  const video = h('input', { type: 'url', value: x?.video_url || '', placeholder: 'https://youtube.com/…' });
+  const cues = h('textarea', { rows: '4', value: x?.cues || '', placeholder: 'e.g. Soft knees. Push hips back. Bar stays close to the legs.' });
+  let dlg;
+  const extra = x ? h('button', {
+    type: 'button',
+    class: 'btn danger',
+    onclick: async () => {
+      if (!confirm(`Delete ${x.name} from the library? Rep maxes recorded for it are deleted too. Workouts keep the exercise name.`)) return;
+      const { error } = await sb.from('exercises').delete().eq('id', x.id);
+      if (error) return toast(error.message, true);
+      dlg.close();
+      await loadLibrary();
+      renderClientList();
+      renderPanel();
+      toast('Exercise deleted');
+    },
+  }, 'Delete') : null;
+  dlg = openDialog({
+    title: x ? 'Edit exercise' : 'Add exercise',
+    fields: [
+      field('Name', name),
+      field('Demo video link (optional)', video, 'A YouTube, Instagram or other video link. Clients open it in a new tab.'),
+      field('Coaching cues (optional)', cues),
+    ],
+    extra,
+    onSubmit: async () => {
+      const url = video.value.trim();
+      if (url && !safeUrl(url)) return 'The video link should start with https://';
+      const row = { name: name.value.trim(), video_url: url, cues: cues.value.trim() };
+      const { error } = x
+        ? await sb.from('exercises').update(row).eq('id', x.id)
+        : await sb.from('exercises').insert(row);
+      if (error) return error.code === '23505' ? 'That exercise is already in your library.' : error.message;
+      await loadLibrary();
+      renderClientList();
+      renderPanel();
+      toast(x ? 'Exercise updated' : `${row.name} added to the library`);
+    },
+  });
 }
 
 // ---------------------------------------------------------------------------

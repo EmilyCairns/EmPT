@@ -8,3 +8,8 @@ export const SUPABASE_ANON_KEY = 'sb_publishable_v-eg_rA9Jxwj2jng2qvgZA_-cdTKF2f
 // Shown to your clients in the app.
 export const APP_NAME = 'EmPT';
 export const TRAINER_NAME = 'Emily';
+
+// Percentage-based weights (e.g. 70% of 1RM) are rounded to this many kg,
+// so they can be loaded with real plates. 2.5 suits most gyms; use 1 or
+// 1.25 if you have small change plates.
+export const ROUND_TO_KG = 2.5;
