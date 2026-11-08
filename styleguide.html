@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EmPT Style Guide</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="design-tokens.css">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    /* Layout for this page only. Still uses tokens. */
+    .sg { width: 100%; max-width: var(--content-max-width); margin: 0 auto; padding: var(--space-6) var(--gutter) var(--space-10); }
+    .sg section { margin-top: var(--space-10); }
+    .sg h2 { padding-bottom: var(--space-2); border-bottom: var(--border-width) solid var(--color-border); margin-bottom: var(--space-4); }
+    .sg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--space-3); }
+    .sg-swatch { border: var(--border-width) solid var(--color-border); border-radius: var(--radius-card); overflow: hidden; background: var(--color-surface); }
+    .sg-swatch-color { height: 64px; border-bottom: var(--border-width) solid var(--color-border); }
+    .sg-swatch-label { padding: var(--space-2) var(--space-3); font-size: var(--text-sm); }
+    .sg-swatch-label code { display: block; color: var(--color-text-muted); font-size: var(--text-xs); overflow-wrap: anywhere; }
+    .sg-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); }
+    .sg-type > * { margin: 0 0 var(--space-3); }
+    .sg-type code, .sg-space code { color: var(--color-text-muted); font-size: var(--text-xs); margin-left: var(--space-2); font-family: inherit; font-weight: var(--weight-regular); }
+    .sg-space { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-2); }
+    .sg-space-bar { height: var(--space-4); background: var(--color-primary); border-radius: var(--space-1); }
+    .sg-radius { width: 96px; height: 64px; background: var(--color-primary-soft); border: var(--border-width) solid var(--color-primary); display: grid; place-items: center; font-size: var(--text-xs); }
+    .sg-static-toast { position: static; transform: none; display: inline-block; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand"><img src="icon.svg" alt="" width="28" height="28">EmPT style guide</div>
+      <div class="topbar-right"><a class="btn ghost small" href="./">Open the app</a></div>
+    </header>
+
+    <main class="sg">
+      <p class="muted">A live preview of <strong>design-tokens.css</strong>. Change a value there, save, and reload this page. The rules are in <strong>DESIGN.md</strong>. Switch your device to dark mode to check the dark theme.</p>
+
+      <section>
+        <h2>Colours</h2>
+        <div class="sg-grid" id="swatches"></div>
+      </section>
+
+      <section class="sg-type">
+        <h2>Type</h2>
+        <h1>Hi Amy <code>h1 · --text-2xl</code></h1>
+        <h2 style="border:0;padding:0">Lower body strength <code>h2 · --text-xl</code></h2>
+        <h4>Card title <code>h4 · --text-lg</code></h4>
+        <p>Body text. Warm up for ten minutes, then work through each exercise in order. <code>--text-md</code></p>
+        <p class="small muted">Secondary text: dates, hints, emails. <code>--text-sm</code></p>
+        <p style="font-size:var(--text-xs)">Timestamps and badges. <code>--text-xs</code></p>
+      </section>
+
+      <section>
+        <h2>Spacing</h2>
+        <div id="spacing"></div>
+      </section>
+
+      <section>
+        <h2>Corners</h2>
+        <div class="sg-row">
+          <div class="sg-radius" style="border-radius:var(--radius-control)">control</div>
+          <div class="sg-radius" style="border-radius:var(--radius-card)">card</div>
+          <div class="sg-radius" style="border-radius:var(--radius-bubble)">bubble</div>
+          <div class="sg-radius" style="border-radius:var(--radius-pill)">pill</div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Buttons</h2>
+        <div class="sg-row">
+          <button class="btn primary">Primary</button>
+          <button class="btn">Secondary</button>
+          <button class="btn ghost">Ghost</button>
+          <button class="btn danger">Delete client</button>
+          <button class="btn primary" disabled>Disabled</button>
+        </div>
+        <div class="sg-row">
+          <button class="btn primary small">+ Add client</button>
+          <button class="btn ghost small">Edit</button>
+          <button class="btn ghost small danger-text">Delete</button>
+          <button class="btn ghost icon" aria-label="Move up">↑</button>
+          <button class="btn ghost icon" aria-label="Remove">✕</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>Form fields</h2>
+        <div class="card">
+          <label class="field"><span class="field-label">Full name</span><input value="Amy Adams"></label>
+          <label class="field"><span class="field-label">Email</span><input type="email" placeholder="you@example.com"><span class="muted small">Your client signs in with this email.</span></label>
+          <label class="field"><span class="field-label">Notes</span><textarea rows="2" placeholder="Warm-up, focus points, how it should feel…"></textarea></label>
+          <p class="error">That email isn't registered yet.</p>
+        </div>
+      </section>
+
+      <section>
+        <h2>Tabs, goals and client list</h2>
+        <div class="tabs" role="tablist">
+          <button class="tab active" role="tab" aria-selected="true">My workouts</button>
+          <button class="tab" role="tab" aria-selected="false">Chat with Emily</button>
+        </div>
+        <p class="goals">Run a 10k in spring</p>
+        <div class="card" style="padding:0;overflow:hidden">
+          <nav class="client-list">
+            <button class="client-item active"><span class="client-name">Amy Adams</span><span class="muted small">amy@example.com</span></button>
+            <button class="client-item"><span class="client-name">Ben Brown <span class="dot" title="New message"></span></span><span class="muted small">ben@example.com</span></button>
+          </nav>
+        </div>
+      </section>
+
+      <section>
+        <h2>Workout card</h2>
+        <div class="stack">
+          <article class="card workout">
+            <div class="row-between top">
+              <div>
+                <h4>Lower body strength</h4>
+                <p class="muted small">Tue, 1 Dec 2026</p>
+              </div>
+              <div class="actions"><button class="btn ghost small">Edit</button><button class="btn ghost small">Duplicate</button><button class="btn ghost small danger-text">Delete</button></div>
+            </div>
+            <p class="notes">Warm up 10 min on the bike.</p>
+            <ol class="exercise-list">
+              <li><span class="ex-title">Back squat</span><span class="ex-meta">4 sets · 8 reps · 50 kg · rest 90s</span><span class="ex-notes">Slow on the way down</span></li>
+              <li><span class="ex-title">Plank</span><span class="ex-meta">3 sets · 45s reps · rest 30s</span></li>
+            </ol>
+            <div class="row-end"><button class="btn primary">Mark as done</button></div>
+          </article>
+          <article class="card workout done">
+            <h4>Upper body push</h4>
+            <p class="muted small">Mon, 30 Nov 2026<span class="badge">✓ Done 30 Nov, 18:02</span></p>
+            <div class="row-end"><button class="btn ghost">Mark as not done</button></div>
+          </article>
+        </div>
+      </section>
+
+      <section>
+        <h2>Chat</h2>
+        <div class="chat">
+          <div class="messages" style="height:auto">
+            <div class="bubble theirs"><p>Hi! Knee felt fine today.</p><time>7 Nov, 10:00</time></div>
+            <div class="bubble mine"><p>Great, keep it up! Add 2.5 kg next session.</p><time>7 Nov, 10:04</time></div>
+          </div>
+          <form class="composer" onsubmit="return false"><textarea rows="2" placeholder="Write a message…" aria-label="Message"></textarea><button class="btn primary">Send</button></form>
+        </div>
+      </section>
+
+      <section>
+        <h2>Notifications</h2>
+        <div class="sg-row">
+          <div class="toast sg-static-toast">Workout saved</div>
+          <div class="toast error sg-static-toast">Something went wrong</div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    // Read colour and spacing tokens straight from design-tokens.css so this
+    // page never goes out of date.
+    const styles = getComputedStyle(document.documentElement);
+    const tokens = [];
+    for (const sheet of document.styleSheets) {
+      if (!sheet.href || !sheet.href.endsWith('design-tokens.css')) continue;
+      for (const rule of sheet.cssRules) {
+        if (rule.selectorText === ':root') for (const name of rule.style) if (name.startsWith('--')) tokens.push(name);
+      }
+    }
+    const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; };
+    const swatches = document.getElementById('swatches');
+    for (const name of tokens.filter((t) => t.startsWith('--color-'))) {
+      const card = el('div', 'sg-swatch');
+      const chip = el('div', 'sg-swatch-color');
+      chip.style.background = `var(${name})`;
+      const label = el('div', 'sg-swatch-label', name.replace('--color-', ''));
+      label.append(el('code', '', `${name}: ${styles.getPropertyValue(name).trim()}`));
+      card.append(chip, label);
+      swatches.append(card);
+    }
+    const spacing = document.getElementById('spacing');
+    for (const name of tokens.filter((t) => t.startsWith('--space-'))) {
+      const row = el('div', 'sg-space');
+      const bar = el('div', 'sg-space-bar');
+      bar.style.width = `var(${name})`;
+      const label = el('span', 'small', name);
+      label.append(el('code', '', styles.getPropertyValue(name).trim()));
+      row.append(bar, label);
+      spacing.append(row);
+    }
+  </script>
+</body>
+</html>

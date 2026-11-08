@@ -12,7 +12,9 @@ The pages are hosted free on **GitHub Pages**. Logins, workouts and messages are
 | File | What it is |
 | --- | --- |
 | `index.html`, `app.js`, `styles.css` | The app itself |
-| `config.js` | Your Supabase details and display names. **The only file you need to edit.** |
+| `DESIGN.md`, `design-tokens.css` | **The design system.** Rules and values for how the app looks. Edit these to restyle it. |
+| `styleguide.html` | Live preview of the design system |
+| `config.js` | Your Supabase details and display names. **The only file you need to edit for setup.** |
 | `supabase/schema.sql` | Sets up the database. Paste it into Supabase once. |
 | `manifest.webmanifest`, `icon.svg` | Lets clients "Add to Home Screen" on their phone |
 
