@@ -63,6 +63,7 @@ const formatDate = (iso) =>
   new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 const formatDateTime = (ts) =>
   new Date(ts).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+const goalsBox = (label, text) => h('div', { class: 'goals' }, h('p', { class: 'eyebrow' }, label), h('p', {}, text));
 const firstName = (name) => (name || '').trim().split(/\s+/)[0] || 'there';
 const clientName = (id) => state.clients.find((c) => c.id === id)?.full_name || 'a client';
 
@@ -150,7 +151,7 @@ function renderLogin() {
   const status = h('p', { class: 'muted', 'aria-live': 'polite' });
   const btn = h('button', { type: 'submit', class: 'btn primary block' }, 'Email me a sign-in link');
   const form = h('form', {
-    class: 'card narrow',
+    class: 'narrow login',
     onsubmit: async (e) => {
       e.preventDefault();
       const address = email.value.trim();
@@ -170,8 +171,10 @@ function renderLogin() {
       }
     },
   },
-    h('div', { class: 'login-brand' }, h('img', { src: 'icon.svg', alt: '', width: '48', height: '48' }), h('h1', {}, APP_NAME)),
-    h('p', { class: 'muted' }, 'Sign in to see your workouts and chat with your trainer. No password needed.'),
+    h('div', { class: 'login-brand brand' }, h('img', { src: 'icon.svg', alt: '', width: '32', height: '32' }), APP_NAME),
+    h('p', { class: 'eyebrow' }, 'Personal training'),
+    h('h1', { class: 'display' }, 'Your training, ', h('em', {}, 'personalised'), '.'),
+    h('p', { class: 'lead' }, `Sign in to see your workouts and chat with ${TRAINER_NAME}. No password needed.`),
     field('Email', email),
     btn,
     status);
@@ -245,7 +248,7 @@ function renderTrainerApp() {
   ui.layout = h('div', { class: 'layout' },
     h('aside', { class: 'sidebar' },
       h('div', { class: 'sidebar-head' },
-        h('h2', {}, 'Clients'),
+        h('h2', { class: 'eyebrow' }, 'Clients'),
         h('button', { class: 'btn primary small', onclick: () => openClientDialog() }, '+ Add client')),
       ui.list),
     ui.panel);
@@ -295,7 +298,7 @@ function renderPanel() {
       h('div', { class: 'panel-title' },
         h('h2', {}, c.full_name),
         h('p', { class: 'muted small' }, c.email),
-        c.goals ? h('p', { class: 'goals' }, c.goals) : null),
+        c.goals ? goalsBox('Goals', c.goals) : null),
       h('button', { class: 'btn ghost small', onclick: () => openClientDialog(c) }, 'Edit client')),
     tabs([['workouts', 'Workouts'], ['chat', 'Chat']], renderPanel),
     body);
@@ -404,7 +407,7 @@ function openWorkoutEditor(client, workout, onSaved) {
         h('input', { value: r[key] || '', placeholder, 'aria-label': placeholder, class: cls, oninput: (e) => { r[key] = e.target.value; } });
       return h('div', { class: 'ex-row' },
         h('div', { class: 'ex-row-head' },
-          h('span', { class: 'muted small' }, `Exercise ${i + 1}`),
+          h('span', { class: 'eyebrow' }, `Exercise ${String(i + 1).padStart(2, '0')}`),
           h('div', { class: 'actions' },
             iconBtn('Move up', '↑', i === 0, () => { [rows[i - 1], rows[i]] = [rows[i], rows[i - 1]]; drawRows(); }),
             iconBtn('Move down', '↓', i === rows.length - 1, () => { [rows[i + 1], rows[i]] = [rows[i], rows[i + 1]]; drawRows(); }),
@@ -428,7 +431,7 @@ function openWorkoutEditor(client, workout, onSaved) {
       field('Date', date, 'Leave empty for a workout they can do any time.'),
       field('Notes', notes),
       h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Exercises'), exList,
-        h('button', { type: 'button', class: 'btn ghost', onclick: () => { rows.push(blankExercise()); drawRows(); exList.lastChild?.querySelector('input')?.focus(); } }, '+ Add exercise')),
+        h('button', { type: 'button', class: 'btn', onclick: () => { rows.push(blankExercise()); drawRows(); exList.lastChild?.querySelector('input')?.focus(); } }, '+ Add exercise')),
     ],
     onSubmit: async () => {
       const exercises = rows
@@ -466,7 +469,7 @@ function workoutCard(w, { actions = [], onChange }) {
   ].filter(Boolean).join(' · ');
 
   const toggle = h('button', {
-    class: 'btn ' + (done ? 'ghost' : 'primary'),
+    class: 'btn' + (done ? '' : ' primary'),
     onclick: async () => {
       toggle.disabled = true;
       const { error } = await sb.rpc('set_workout_completed', { p_workout_id: w.id, p_done: !done });
@@ -480,10 +483,9 @@ function workoutCard(w, { actions = [], onChange }) {
   return h('article', { class: 'card workout' + (done ? ' done' : '') },
     h('div', { class: 'row-between top' },
       h('div', {},
+        h('p', { class: 'eyebrow' }, w.workout_date ? formatDate(w.workout_date) : 'Any day'),
         h('h4', {}, w.title),
-        h('p', { class: 'muted small' },
-          w.workout_date ? formatDate(w.workout_date) : 'Any day',
-          done ? h('span', { class: 'badge' }, `✓ Done ${formatDateTime(w.completed_at)}`) : null)),
+        done ? h('span', { class: 'badge' }, `✓ Done · ${formatDateTime(w.completed_at)}`) : null),
       actions.length ? h('div', { class: 'actions' },
         actions.map(([label, fn]) => h('button', { class: 'btn ghost small' + (label === 'Delete' ? ' danger-text' : ''), onclick: fn }, label))) : null),
     w.notes ? h('p', { class: 'notes' }, w.notes) : null,
@@ -505,8 +507,8 @@ function renderClientApp() {
   closeChat();
   const body = h('div', { class: 'tab-body' });
   mount(header(), h('main', { class: 'client-main' },
-    h('h1', { class: 'greeting' }, `Hi ${firstName(state.me.full_name)}`),
-    state.me.goals ? h('p', { class: 'goals' }, state.me.goals) : null,
+    h('h1', {}, 'Hi ', h('em', {}, firstName(state.me.full_name))),
+    state.me.goals ? goalsBox('Your goals', state.me.goals) : null,
     tabs([['workouts', 'My workouts'], ['chat', `Chat with ${TRAINER_NAME}`]], renderClientApp),
     body));
   if (state.tab === 'workouts') renderClientWorkouts(body);

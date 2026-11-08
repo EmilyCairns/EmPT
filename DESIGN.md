@@ -1,6 +1,10 @@
 # EmPT design system
 
+> **Warm apothecary journal on parchment.**
+
 This document decides how EmPT looks and feels. Anyone changing the app's appearance, whether that's you, a developer or an AI assistant, must follow it. If a change would break a rule here, update this document first.
+
+EmPT should read like a premium editorial wellness journal printed on warm cream paper. Serif headlines speak with quiet authority, and a humanist sans carries the interface in the calm voice of a good coach. Surfaces are never sterile white: everything sits in a warm parchment range. A single terracotta accent marks actions and active states, like a wax seal on an apothecary label. Shapes are generously rounded but never toy-like, because shadows are rare and colour does most of the work.
 
 ## How it fits together
 
@@ -11,117 +15,183 @@ This document decides how EmPT looks and feels. Anyone changing the app's appear
 | `styleguide.html` | A **preview** of every token and component | Nobody: it updates itself |
 | `styles.css` | How components are built from the tokens | Developer / AI |
 
-**To change the look:**
-1. Edit a value in `design-tokens.css`. For example, change `--color-primary` to your brand colour.
-2. Open `styleguide.html` (in the browser, or at `…/EmPT/styleguide.html` once the site is live) to see the result. Check it in dark mode too.
-3. If you're adding a new rule or changing an old one, write it down here.
+**To change the look:** edit a value in `design-tokens.css`, then reload `styleguide.html` (in the browser, or at `…/EmPT/styleguide.html` once the site is live).
+
+`design-tokens.css` has two layers:
+1. **Palette:** the named colours (Parchment, Ink, Terracotta Seal…).
+2. **Roles:** what each colour is *for* (`--color-bg`, `--color-accent`…).
+
+`styles.css` only uses roles. To recolour something, point its role at a different palette colour.
 
 ---
 
 ## 1. Brand
 
-> These choices are yours to make. They're pre-filled with what the app does today, so replace anything that doesn't feel like you.
-
-- **App name:** EmPT. It's set in `config.js` (`APP_NAME`) and in `manifest.webmanifest`.
-- **Personality:** calm, encouraging and professional. It should feel like a supportive coach, not a hardcore gym.
-- **Brand colour:** deep teal (`--color-primary`).
-- **Logo / icon:** `icon.svg`, a white dumbbell on the brand colour.
-- **Imagery:** none right now. If photos are added, they show real training and real people, not stock models.
+- **App name:** EmPT. It's set in `config.js` (`APP_NAME`) and `manifest.webmanifest`. The wordmark is set in the serif, in Ink, next to the terracotta seal icon.
+- **Personality:** calm, warm, editorial, unhurried. It's health and fitness that trusts the reader to slow down, never a shouty gym.
+- **Accent:** Terracotta Seal `#b05a36`. It's the **only** accent colour.
+- **Logo / icon:** `icon.svg`, an outlined dumbbell in parchment on a terracotta-to-tan gradient seal.
+- **Theme:** **light only.** The parchment warmth *is* the brand, so there is deliberately no dark mode.
 
 ## 2. Voice and wording
 
-Every piece of text in the app (buttons, messages, empty states) follows these rules.
-
 1. **Talk to the client as "you"**, and keep it warm and short. ("You're all caught up.")
-2. **Sentence case everywhere.** Write "Mark as done", not "Mark As Done". The exception is `--heading-transform: uppercase`, if you choose it; then it's applied by the styling, never typed in capitals.
+2. **Sentence case everywhere.** Eyebrow labels are typed in sentence case; the styling turns them into capitals.
 3. **Buttons say what they do** using a verb: "Add client", "Save", "Send". Avoid "OK" and "Submit".
 4. **British English spelling:** personalised, colour, organise.
-5. **Encourage, don't nag.** Celebrate completed workouts ("Nice work!"). Never shame missed ones.
-6. **Errors explain what to do next.** "That email isn't registered yet. Ask your trainer to add you." Avoid "Error 400".
-7. **No jargon or abbreviations** that a new client wouldn't know, unless you write them into a workout yourself.
+5. **Encourage, don't nag.** Celebrate completed workouts. Never shame missed ones.
+6. **Errors explain what to do next**, in plain words.
+7. **The italic word is the emotional word.** In a serif headline, the roman words set up the structure, and the one word that carries the feeling goes in italic: "Your training, *personalised*." or "Hi *Amy*". See section 4.
 
 ## 3. Colour
 
-All colours live in `design-tokens.css` and nowhere else.
+### Palette
 
-1. **The brand colour is for the one most important action on screen**, such as "Mark as done", "Save", "Send" or "+ New workout", plus the active tab, focus outline and your own chat bubbles. Don't use it for decoration.
-2. **`--color-primary-soft`** is the only highlight colour, for things that should stand out gently: the goals box, the selected client, badges.
-3. **`--color-danger` is only for destructive actions and errors**, such as delete buttons and failed saves. Never use it for decoration or emphasis.
-4. **`--color-notify`** is only for the "new message" dot.
-5. **Text on a coloured background uses the matching `--color-on-…` token.** For example, text on `--color-primary` is `--color-on-primary`.
-6. **Contrast:** body text must have a contrast ratio of at least **4.5 : 1** against its background, and large text or icons at least **3 : 1**. Check new colours with a contrast checker (search "WebAIM contrast checker") before using them.
-7. **Every colour needs a dark-mode version.** When you change or add a colour in the light section of `design-tokens.css`, change or add it in the dark section too.
-8. **Never use colour alone to carry meaning.** A completed workout gets a "✓ Done" badge as well as a softer look; errors are written out in words.
+| Name | Value | Use |
+| --- | --- | --- |
+| Terracotta Seal | `#b05a36` | Primary button fills, accent borders, active tab underline, unread dot |
+| Terracotta Text | `#a4522f` | Terracotta used **as text** (eyebrows, outlined buttons, exercise numbers). It's a touch deeper so small text stays readable on Aged Paper |
+| Parchment | `#fef9ef` | Page canvas, header, dialogs, inputs. The base tone |
+| Aged Paper | `#f5eee1` | Cards, goals box, hover wash. One step deeper than the canvas |
+| Warm Taupe | `#d1c9bf` | Hairline borders and dividers |
+| Ink | `#2a2b2f` | Headings, primary text, your own chat bubbles, toasts |
+| Charcoal | `#333333` | Longer reading text (workout notes, coaching notes) |
+| Graphite | `#515151` | Helper text, dates, placeholders |
+| Ash | `#808988` | Input borders **only**: the one cool neutral |
+| Brick | `#8a2c1c` | Destructive actions and errors **only** |
+
+### Surfaces (how things are layered)
+
+| Level | Colour | Used for |
+| --- | --- | --- |
+| 0 | Parchment | Page background |
+| 1 | Aged Paper | Cards and panels: a soft step up, with **no shadow** |
+| 2 | Warm Taupe outline | Bordered containers and dividers |
+| 3 | Terracotta | Active and selected interactive states |
+
+### Rules
+
+1. **Never use pure white (`#ffffff`)** anywhere. It kills the parchment warmth.
+2. **Terracotta is reserved for three jobs:** primary buttons, eyebrow labels and active/selected states (including outlined buttons, the active tab, the selected client and the unread dot). Never use it for body text, large background areas or text bigger than 24px.
+3. **No second accent colour.** The system is warm monochrome plus one rust. Brick is not an accent: it appears only on delete buttons and error messages.
+4. **Build depth with colour before shadow:** Parchment, then Aged Paper, then a Taupe outline.
+5. **Text on a terracotta or ink fill is Parchment.**
+6. **Contrast:** body text must be at least **4.5 : 1** against its background, and large text and icons at least **3 : 1**. Checked pairs: Ink on Parchment 13.5, Graphite on Aged Paper 6.9, Terracotta Text on Aged Paper 4.8, Parchment on Terracotta 4.6, Brick on Parchment 8.1. Check any new colour with a contrast checker (search "WebAIM contrast checker").
+7. **Never use colour alone to carry meaning.** Completed workouts get a "✓ Done" badge; errors are written out in words.
 
 ## 4. Typography
 
-1. Use **two font families at most**: `--font-body` for everything, and `--font-heading` for headings and the app name. They can be the same font.
-2. Only use the sizes in the type scale (`--text-xs` to `--text-2xl`). Don't add in-between sizes.
-3. **Body text and every input are at least `--text-md` (16px).** Smaller inputs make iPhones zoom in.
-4. Use at most three weights: regular for text, strong for labels, buttons and exercise names, and heading for headings.
-5. Use italics only for coaching notes on exercises.
-6. Keep lines short: reading areas are never wider than `--reading-max-width`.
+| Family | Font in the app | Stands in for | Used for |
+| --- | --- | --- | --- |
+| Serif | **Newsreader** | Financier Display | Headlines only: page titles, card titles, dialog titles, the wordmark |
+| Sans | **Inter** | Ftbase | All body text and interface text |
+| Mono | **JetBrains Mono** | Fragment Mono | Tiny all-caps badges ("✓ Done · 30 Nov"). Use sparingly |
 
-### Changing the font
+Fonts load from Google Fonts in the `<head>` of `index.html` and `styleguide.html`. If you buy licences for Financier Display and Ftbase, self-host them and change `--font-display` / `--font-body`.
 
-1. Choose a font at [fonts.google.com](https://fonts.google.com). Click **Get font → Get embed code** and copy the `<link …>` lines.
-2. Paste them into the `<head>` of **both** `index.html` and `styleguide.html`, above the `design-tokens.css` line.
-3. In `design-tokens.css`, set `--font-body` and/or `--font-heading`, e.g. `--font-heading: "Poppins", var(--font-body);`. Always keep a fallback after the font name.
+### Type scale
+
+| Role | Token | Size | Family | Notes |
+| --- | --- | --- | --- | --- |
+| Mono badge | `--text-mono` | 11px | Mono | All caps |
+| Eyebrow | `--text-eyebrow` | 12px | Sans 600 | All caps, Terracotta Text. Used for `h3` and `.eyebrow` |
+| Body small | `--text-body-sm` | 14px | Sans | Dates, helper text, small buttons |
+| Body | `--text-body` | 16px | Sans 400 | Default; **every input is at least this size** |
+| Lead | `--text-body-lg` | 18px | Sans 300 | Intro paragraphs |
+| Title | `--text-title` | 26px | Serif 400 | Card and dialog titles, wordmark. *Added for the app* |
+| Heading | `--text-heading` | 34px | Serif 400 | Page headings ("Hi *Amy*"). Smallest size allowed to use italic |
+| Heading large | `--text-heading-lg` | 45px | Serif 400 | Sign-in headline (drops to 34px on phones) |
+
+The 64px, 80px and 88px sizes from the reference are for marketing heroes. If EmPT ever gets a landing page, add them as tokens then.
+
+### Rules
+
+1. **The serif is for headlines only.** Never use it for body text, buttons or labels.
+2. **Roman plus italic in one headline is the signature move.** Write it as `<em>` inside an `h1` or `.display`. The italic is weight 300; the roman is 400. Only one word or short phrase is italic, and it's the emotional word. Never italicise whole sentences, UI labels or body text.
+3. **Italic only at 34px and above.** Card and dialog titles (26px) stay roman.
+4. **All sans text uses `--tracking-body` (−0.023em),** which is set once on `body`. Never override it per element. **Never apply it to the serif**: headings reset to normal tracking.
+5. Sans weights: 300 for lead text, 400 for body, 600 for buttons, labels and eyebrows, and 700 only for rare emphasis.
+6. **An eyebrow sits 8–12px above the heading it introduces.** Use it for section names ("Up next"), workout dates, "Your goals" and "Exercise 01".
 
 ## 5. Spacing and layout
 
-1. **All spacing comes from the 4px grid** (`--space-1` to `--space-10`). Don't use in-between values.
-2. **Related things sit closer together than unrelated things.** A label and its input are `--space-2` apart, while separate fields are `--space-4` apart.
-3. Cards have `--space-4` padding inside, and the gap between cards is `--space-3`.
-4. On phones, content keeps at least `--gutter` of space from the screen edge, and **the page never scrolls sideways**.
-5. **Design for phones first.** Most clients will use their phone. The layout switches to desktop at **760px** wide. That number is written in the `@media` rule at the bottom of `styles.css`, because CSS can't use a token there. If you change it, change it in that one place and update this line.
+1. **8px base unit.** Use `--space-2` (8px) and its multiples: 16, 24, 32, 40, 48, 64, 80. The half-steps `--space-1` (4), `--space-3` (12) and `--space-5` (20) are only for fine component tuning (button and input padding, tight gaps).
+2. **Density is comfortable.** Whitespace is a design material, not a gap filler. Cards have 32px padding inside (24px on phones), elements sit 16px apart, and sections are separated by 40px or more.
+3. On phones, content keeps `--gutter` (24px, or 16px on very small phones) from the screen edge, and **the page never scrolls sideways**.
+4. **Design for phones first.** The layout switches to desktop at **760px**. That number is written in the `@media` rule at the bottom of `styles.css`, because CSS can't use a token there.
+5. **One sticky top bar** with a Warm Taupe hairline beneath it. The trainer's client list is the only sidebar. It's an app necessity, kept quiet: Parchment, no chrome.
 
-## 6. Shape and depth
+## 6. Shape and elevation
 
-1. Corners: buttons and inputs use `--radius-control`, cards, dialogs and panels use `--radius-card`, chat bubbles use `--radius-bubble`, and badges and dots use `--radius-pill`.
-2. Borders are always `--border-width` in `--color-border`.
-3. Shadows: cards use `--shadow-card`, and things floating above the page (toasts) use `--shadow-overlay`. Don't use any other shadows.
+| Element | Radius token | Value |
+| --- | --- | --- |
+| Buttons | `--radius-buttons` | 40px |
+| Cards, dialogs, chat window, chat bubbles, textareas | `--radius-cards` | 24px |
+| Inputs, badges, dots, toasts | `--radius-pills` | fully round |
+| Navigation items (client list) | `--radius-nav` | 12px |
+| Chart bars (future) | `--radius-chart` | 2px: deliberately square |
+
+1. **Rounded shapes are non-negotiable.** Never use rectangular buttons or square-cornered cards.
+2. Single-line inputs are pills. Multi-line text boxes use the 24px card radius, because a pill can't hold several lines.
+3. **Only two shadows exist:**
+   - `--shadow-xl` for things floating above the page: dialogs and toasts.
+   - `--shadow-lg`, a subtle glow, is reserved for an active search/input state.
+   Cards never have shadows. Don't add small, sharp drop shadows.
 
 ## 7. Components
 
 | Component | Rules |
 | --- | --- |
-| **Primary button** (`.btn.primary`) | At most **one per card or dialog**, for the main action. |
-| **Ghost button** (`.btn.ghost`) | Secondary actions: Edit, Cancel, Sign out, Duplicate. |
-| **Danger button** (`.btn.danger`, `.danger-text`) | Delete only. Always ask for confirmation first. |
-| **Small / icon buttons** | Only for dense lists of actions (card actions, reordering exercises). Icon buttons must have an `aria-label`. |
-| **Card** (`.card`) | One workout, one form or one block of content per card. Don't put cards inside cards. |
-| **Tabs** (`.tabs`) | Two to four tabs to switch views. Labels are one to three words. |
-| **Goals box** (`.goals`) | Only for the client's goals. |
-| **Badge** (`.badge`) | Short status labels ("✓ Done …") of up to three words. |
-| **Dialog** (`.dialog`) | Creating or editing something. The title says what's happening ("New workout for Amy"). Cancel is on the left of Save. |
-| **Toast** (`.toast`) | Short confirmations after an action ("Workout saved"). They disappear by themselves, so they must never hold information the user needs to keep. |
-| **Chat bubbles** | Your messages are on the right in the brand colour. Theirs are on the left in a neutral colour. Every message shows a timestamp. |
+| **Primary button** (`.btn.primary`) | Terracotta fill, Parchment text, Sans 600 16px, padding 12px × 24px, 40px radius, no shadow. **At most one per card or dialog.** |
+| **Outlined button** (`.btn`) | Transparent, 1.5px terracotta border, Terracotta Text. Same height as primary, never smaller. For supporting actions: "+ Add exercise", "Mark as not done". |
+| **Ghost button** (`.btn.ghost`) | No border or fill, Ink text. A light Aged Paper wash on hover. For low-priority actions: Cancel, Sign out, Edit, Duplicate. |
+| **Danger** (`.btn.danger`, `.danger-text`) | Brick, outlined or text-only. Delete only, and always ask for confirmation first. |
+| **Icon button** (`.btn.icon`) | 40px circle, no fill, Ink symbol, Aged Paper on hover. Must have an `aria-label`. |
+| **Input** | Pill, Parchment fill, 1px Ash border, padding 12px × 20px, Sans 16px Ink, Graphite placeholder. Focus: terracotta border plus a 3px soft terracotta ring. |
+| **Card** (`.card`) | Aged Paper, 24px radius, 32px padding, no border, no shadow. Don't put cards inside cards. |
+| **Workout card** | Eyebrow date, then a serif title, then Charcoal notes, then numbered exercises ("01", "02" in Terracotta Text). Completed workouts step *down* to Parchment with a Taupe outline and a mono "✓ Done" badge. |
+| **Eyebrow** (`h3`, `.eyebrow`) | All caps, Sans 600 12px, Terracotta Text, 8–12px above what it introduces. |
+| **Goals box** (`.goals`) | Aged Paper panel with a "Your goals" eyebrow. |
+| **Badge** (`.badge`) | Mono 11px all caps, Taupe pill outline, Terracotta Text. Up to about four words. |
+| **Tabs** (`.tabs`) | Sans 600, Graphite. The active tab is Ink with a 2px terracotta underline, on a Taupe hairline. |
+| **Client list item** | 12px radius. On hover or when selected: an Aged Paper wash, and the selected name turns Terracotta Text. |
+| **Dialog** | Parchment, 24px radius, `--shadow-xl`, serif title. Cancel (ghost) sits beside Save (primary). |
+| **Chat** | A Parchment window with a Taupe outline. Your bubbles are Ink with Parchment text, on the right; theirs are Aged Paper, on the left. Each has a timestamp. |
+| **Toast** (`.toast`) | Ink pill, Parchment text, `--shadow-xl`. Short confirmations only; they disappear by themselves. |
+| **Inline list** (future) | Items separated by a terracotta "·" with 16px either side, wrapping with an 8px row gap. |
+| **Charts** (future) | Terracotta bars with square 2px corners, 1px Taupe axes, Graphite 12px labels, no grid background. |
 
 New components must reuse existing tokens. If a new one is genuinely needed, add it to this table and to `styleguide.html`.
 
-## 8. Accessibility (non-negotiable)
+## 8. Imagery and icons
 
-1. Every tap target (buttons, tabs, list items) is at least `--control-height` tall (44px).
-2. Keyboard focus is always visible, using the `--color-focus` outline. Never remove it.
+1. **Photography** (if added): warm-toned, human and in motion, such as golden-hour runs or outdoor training. When text sits on a photo, add a dark warm overlay (about 60%) so the headline stays readable. Photos inside the page use the 24px radius.
+2. **No stock-model gloss and no product screenshots.** Small in-card UI previews are fine.
+3. **Icons are outlined**, with a 1.5–2px stroke in Ink or terracotta. Never filled, never multicolour.
+4. Images that carry meaning have alt text. Decorative ones have `alt=""`.
+
+## 9. Accessibility (non-negotiable)
+
+1. Every tap target is at least `--control-height-sm` (40px). Main buttons and inputs are `--control-height` (48px).
+2. Keyboard focus is always visible: a terracotta outline plus a soft ring. Never remove it.
 3. Every input has a visible label. Placeholders show examples; they don't replace labels.
-4. The contrast rules in section 3 apply to every colour pairing in both light and dark mode.
+4. The contrast rules in section 3 apply to every colour pairing.
 5. Animation stays subtle (`--motion-fast`) and turns off when the device asks for reduced motion.
-6. Images and icons that carry meaning have text alternatives. Decorative ones have empty `alt=""`.
 
-## 9. Brand colour outside the tokens
+## 10. Brand colour outside the tokens
 
-A few files can't read `design-tokens.css`. When you change `--color-primary` or `--color-bg`, update these by hand:
+These files can't read `design-tokens.css`. Update them by hand if the palette changes:
 
-- `icon.svg`: the `fill` of the background square (`#0f766e`).
-- `index.html`: `<meta name="theme-color" content="#0f766e">`, which colours the browser bar on phones.
-- `manifest.webmanifest`: `theme_color` (the brand colour) and `background_color` (the page background).
+- `icon.svg`: the gradient stops (`#b05a36` → `#d4a68e`) and the stroke colour (`#fef9ef`).
+- `index.html`: `<meta name="theme-color" content="#fef9ef">`, which colours the browser bar on phones.
+- `manifest.webmanifest`: `theme_color` and `background_color` (both Parchment).
 
-## 10. Rules for anyone changing the code
+## 11. Rules for anyone changing the code
 
-1. **No raw values in `styles.css`.** Colours, font sizes, spacing, radii, shadows and widths must come from `var(--…)` tokens. The only exceptions are the `760px` breakpoint, percentages and viewport units (`%`, `vh`, `vw`).
-2. **No inline styles in `app.js`.** Use classes from `styles.css`.
-3. Need a new value? Add a token to `design-tokens.css` with a comment saying what it's for, give it a dark-mode value if it's a colour, and mention it in this document.
-4. New or changed components get added to `styleguide.html`.
-5. Check every visual change at phone width (390px) and desktop width, in light and dark mode, before committing.
-6. Don't change the brand choices in section 1 without the owner's say-so.
+1. **No raw values in `styles.css`.** Colours, font sizes, spacing, radii, shadows and widths must come from `var(--…)` tokens. The only exceptions are the `760px` breakpoint, percentages, viewport units and opacity.
+2. **`styles.css` uses role tokens** (`--color-accent`), not palette tokens (`--color-terracotta-seal`).
+3. **No inline styles in `app.js`.** Use classes from `styles.css`.
+4. Need a new value? Add a token to `design-tokens.css` with a comment saying what it's for, and mention it in this document.
+5. New or changed components get added to `styleguide.html`.
+6. Check every visual change at phone width (390px) and desktop width before committing.
+7. Don't change the brand choices in section 1 without the owner's say-so.

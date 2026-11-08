@@ -1,62 +1,99 @@
 /* =====================================================================
-   EmPT DESIGN TOKENS
+   EmPT DESIGN TOKENS — "warm apothecary journal on parchment"
    ---------------------------------------------------------------------
    Every colour, font, size, spacing and shape value the app uses is
    defined here. Change a value here and it changes everywhere.
 
-   - The rules for how these are used are in DESIGN.md.
-   - To see the effect of a change, open styleguide.html.
-   - styles.css must only use these variables, never raw values.
+   Two layers:
+     1. PALETTE  – the named raw colours (Parchment, Ink, Terracotta…).
+     2. ROLES    – what each colour is used for (--color-bg, --color-text…).
+   styles.css only ever uses the ROLE tokens, so to recolour something,
+   point its role at a different palette colour.
+
+   - Rules for using these: DESIGN.md
+   - Live preview: styleguide.html
+   - Fonts are loaded from Google Fonts in index.html and styleguide.html.
    ===================================================================== */
 
 :root {
-  /* ---- Colour: light theme ------------------------------------------ */
-  --color-bg: #f6f7f6;             /* Page background */
-  --color-surface: #ffffff;        /* Cards, header, sidebar, dialogs, inputs */
-  --color-surface-muted: #eef2f1;  /* Secondary buttons, exercise rows in the editor */
-  --color-text: #17201e;           /* Main text */
-  --color-text-muted: #5d6b68;     /* Dates, hints, secondary details */
-  --color-border: #dbe2e0;         /* Lines around cards, inputs, dividers */
+  /* ===== 1. PALETTE ==================================================== */
+  --color-terracotta-seal: #b05a36;  /* The ONE accent. Fills, borders, active states */
+  --color-terracotta-text: #a4522f;  /* Same rust, a touch deeper so small text passes contrast on Aged Paper */
+  --gradient-terracotta-seal: linear-gradient(116deg, rgb(176 90 54), rgb(212 166 142)); /* Decorative only: logo, seals */
+  --color-parchment: #fef9ef;        /* Page canvas. Never use pure white */
+  --color-aged-paper: #f5eee1;       /* Cards and panels: one step deeper than the canvas */
+  --color-warm-taupe: #d1c9bf;       /* Hairlines, dividers, outlines */
+  --color-ink: #2a2b2f;              /* Primary text and headings */
+  --color-charcoal: #333333;         /* Body copy for longer passages */
+  --color-graphite: #515151;         /* Captions, dates, helper text, placeholders */
+  --color-ash: #808988;              /* Input borders only (the one cool neutral) */
+  --color-brick: #8a2c1c;            /* Destructive actions and errors ONLY */
 
-  --color-primary: #0f766e;        /* BRAND COLOUR: main buttons, active tab, focus */
-  --color-on-primary: #ffffff;     /* Text/icons sitting on the brand colour */
-  --color-primary-soft: #d7efec;   /* Light brand tint: goals box, selected client, badges */
+  /* ===== 2. ROLES ====================================================== */
+  --color-bg: var(--color-parchment);              /* Page background */
+  --color-surface: var(--color-parchment);         /* Header, sidebar, dialogs, inputs, chat window */
+  --color-surface-raised: var(--color-aged-paper); /* Cards, goals box, exercise rows, hover wash */
+  --color-text: var(--color-ink);
+  --color-text-body: var(--color-charcoal);        /* Workout notes and exercise details */
+  --color-text-muted: var(--color-graphite);
+  --color-border: var(--color-warm-taupe);
+  --color-input-border: var(--color-ash);
 
-  --color-danger: #b42318;         /* Delete buttons, error messages */
-  --color-on-danger: #ffffff;      /* Text on a danger-coloured background */
-  --color-notify: #b42318;         /* "New message" dot */
+  --color-accent: var(--color-terracotta-seal);    /* Primary buttons, active tab, unread dot */
+  --color-accent-text: var(--color-terracotta-text); /* Eyebrow labels, outlined buttons, exercise numbers */
+  --color-on-accent: var(--color-parchment);       /* Text on a terracotta fill */
+  --color-focus-ring: rgb(176 90 54 / 0.2);        /* Soft glow around focused inputs */
+  --color-focus: var(--color-terracotta-seal);     /* Keyboard focus outline on buttons */
 
-  --color-focus: var(--color-primary);              /* Keyboard focus outline */
-  --color-chat-mine-bg: var(--color-primary);       /* Your own chat bubbles */
-  --color-chat-mine-text: var(--color-on-primary);
-  --color-chat-theirs-bg: var(--color-surface-muted); /* The other person's bubbles */
-  --color-chat-theirs-text: var(--color-text);
-  --color-toast-bg: #17201e;       /* Pop-up confirmations ("Workout saved") */
-  --color-toast-text: #f6f7f6;
-  --color-backdrop: rgb(0 0 0 / 0.45); /* Dimmed page behind dialogs */
+  --color-danger: var(--color-brick);
+  --color-on-danger: var(--color-parchment);
+  --color-notify: var(--color-terracotta-seal);    /* "New message" dot */
 
-  /* ---- Typography --------------------------------------------------- */
-  /* To use a Google Font, see "Changing the font" in DESIGN.md. */
-  --font-body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-heading: var(--font-body);
+  --color-chat-mine-bg: var(--color-ink);          /* Your own chat bubbles */
+  --color-chat-mine-text: var(--color-parchment);
+  --color-chat-theirs-bg: var(--color-aged-paper); /* The other person's bubbles */
+  --color-chat-theirs-text: var(--color-ink);
+  --color-toast-bg: var(--color-ink);
+  --color-toast-text: var(--color-parchment);
+  --color-backdrop: rgb(42 43 47 / 0.45);          /* Ink-tinted dim behind dialogs */
 
-  --weight-regular: 400;
-  --weight-strong: 600;   /* Buttons, labels, exercise names */
-  --weight-heading: 700;  /* Headings and the app name */
+  /* ===== TYPOGRAPHY ==================================================== */
+  /* Serif: editorial headlines only (stands in for Financier Display). */
+  --font-display: "Newsreader", "Tiempos Headline", Georgia, "Times New Roman", serif;
+  /* Sans: all body and interface text (stands in for Ftbase). */
+  --font-body: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Mono: tiny all-caps markers like "DONE" badges. Use sparingly. */
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  --text-xs: 0.75rem;     /* 12px  Chat timestamps, badges */
-  --text-sm: 0.875rem;    /* 14px  Hints, emails, dates, small buttons */
-  --text-md: 1rem;        /* 16px  Body text and every input (never smaller) */
-  --text-lg: 1.125rem;    /* 18px  Card titles, app name */
-  --text-xl: 1.25rem;     /* 20px  Section and dialog headings */
-  --text-2xl: 1.625rem;   /* 26px  Page title ("Hi Amy") */
+  --weight-light: 300;     /* Serif italic accent words; large descriptive sans text */
+  --weight-regular: 400;   /* Body; serif roman headlines */
+  --weight-semibold: 600;  /* Buttons, labels, eyebrows */
+  --weight-bold: 700;      /* Rare emphasis */
 
+  --tracking-body: -0.023em; /* Applies to ALL sans text. Never to the serif */
+
+  /* Sans scale */
+  --text-mono: 11px;       /* Mono badges */
+  --text-eyebrow: 12px;    /* All-caps pre-titles */
+  --text-body-sm: 14px;    /* Helper text, dates, small buttons */
+  --text-body: 16px;       /* Body and every input (never smaller) */
+  --text-body-lg: 18px;    /* Intro paragraphs */
+  --text-subheading: 20px;
+  /* Serif scale */
+  --text-title: 26px;      /* App addition: card and dialog titles (roman only) */
+  --text-heading: 34px;    /* Page headings. Smallest size allowed to use italic */
+  --text-heading-lg: 45px; /* Sign-in headline */
+
+  --leading-tight: 1;       /* Wordmark and mono badges */
+  --leading-eyebrow: 1.4;
   --leading-body: 1.5;
-  --leading-heading: 1.25;
-  --heading-letter-spacing: 0;   /* e.g. -0.01em for tighter, 0.05em for airy */
-  --heading-transform: none;     /* none | uppercase */
+  --leading-body-lg: 1.4;
+  --leading-subheading: 1.3;
+  --leading-title: 1.15;
+  --leading-heading: 1.15;
+  --leading-heading-lg: 1.1;
 
-  /* ---- Spacing: 4px grid -------------------------------------------- */
+  /* ===== SPACING (8px base; 4/12/20 for fine component tuning) ======== */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -65,66 +102,48 @@
   --space-6: 24px;
   --space-8: 32px;
   --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
 
-  /* ---- Shape -------------------------------------------------------- */
-  --radius-control: 10px;  /* Buttons, inputs, goals box */
-  --radius-card: 14px;     /* Cards, dialogs, chat window, exercise rows */
-  --radius-bubble: 16px;   /* Chat bubbles */
-  --radius-pill: 999px;    /* Badges, dots */
+  /* ===== SHAPE ========================================================= */
+  --radius-chart: 2px;     /* Bars in any future charts: deliberately square */
+  --radius-nav: 12px;      /* Navigation items such as the client list */
+  --radius-cards: 24px;    /* Cards, dialogs, chat window, textareas */
+  --radius-buttons: 40px;  /* Every button */
+  --radius-pills: 9999px;  /* Inputs, tags, badges, dots, toasts */
   --border-width: 1px;
-  --focus-ring-width: 2px;
-  --tab-indicator-width: 3px; /* Underline under the active tab */
+  --border-width-strong: 1.5px; /* Outlined buttons */
+  --focus-ring-width: 3px;
+  --tab-indicator-width: 2px;
 
-  /* ---- Depth -------------------------------------------------------- */
-  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.05), 0 4px 16px rgb(0 0 0 / 0.04);
-  --shadow-overlay: 0 6px 24px rgb(0 0 0 / 0.2);  /* Toasts */
+  /* ===== ELEVATION: only these two shadows exist ======================= */
+  --shadow-lg: 0 0 20px 0 rgb(0 0 0 / 0.15);          /* Subtle glow: active search/input */
+  --shadow-xl: 12px 32px 80px 0 rgb(42 43 47 / 0.1);  /* Floating: dialogs, toasts */
 
-  /* ---- Sizes and layout --------------------------------------------- */
-  --control-height: 44px;     /* Minimum height of buttons and inputs (tap target) */
-  --control-height-sm: 36px;  /* Small buttons */
-  --gutter: 16px;             /* Space between content and the screen edge on phones */
-  --sidebar-width: 300px;     /* Trainer's client list on wide screens */
-  --content-max-width: 900px; /* Trainer's client panel */
-  --reading-max-width: 760px; /* Client's page */
+  /* ===== SIZES AND LAYOUT ============================================= */
+  --control-height: 48px;     /* Buttons and inputs (12px + 24px line + 12px) */
+  --control-height-sm: 40px;  /* Small buttons and icon buttons */
+  --topbar-height: 64px;
+  --gutter: 24px;             /* Outer page padding (16px on small phones) */
+  --page-max-width: 1280px;
+  --sidebar-width: 320px;
+  --content-max-width: 880px; /* Trainer's client panel */
+  --reading-max-width: 720px; /* Client's page */
   --dialog-width: 480px;
   --dialog-width-wide: 720px; /* Workout editor */
-  --chat-max-height: 560px;   /* Tallest the chat window gets on big screens */
-  /* The phone/desktop switch-over is 760px. CSS can't use a variable in a
-     media query, so it is written directly in styles.css (see DESIGN.md). */
+  --chat-max-height: 560px;
+  /* Phone/desktop switch-over is 760px, written directly in styles.css
+     (CSS can't use a variable in a media query). */
 
-  /* ---- Motion ------------------------------------------------------- */
-  --motion-fast: 120ms ease-out;
+  /* ===== MOTION ======================================================== */
+  --motion-fast: 150ms ease-out;
 
-  color-scheme: light;
+  color-scheme: light; /* Light theme only, by design (see DESIGN.md) */
 }
 
-/* ---- Colour: dark theme (used when the phone/computer is in dark mode) -- */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --color-bg: #0f1413;
-    --color-surface: #171e1d;
-    --color-surface-muted: #1f2827;
-    --color-text: #e7eeec;
-    --color-text-muted: #9aa9a6;
-    --color-border: #2b3634;
-
-    --color-primary: #2bb3a5;
-    --color-on-primary: #04201d;
-    --color-primary-soft: #163a36;
-
-    --color-danger: #f97066;
-    --color-on-danger: #2a0603;
-    --color-notify: #f97066;
-
-    --color-toast-bg: #e7eeec;
-    --color-toast-text: #0f1413;
-    --color-backdrop: rgb(0 0 0 / 0.6);
-
-    --shadow-card: none;
-    --shadow-overlay: 0 6px 24px rgb(0 0 0 / 0.5);
-
-    color-scheme: dark;
-  }
+@media (max-width: 400px) {
+  :root { --gutter: 16px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
