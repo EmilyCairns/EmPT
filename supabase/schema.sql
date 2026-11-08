@@ -55,6 +55,12 @@ create table if not exists public.workouts (
 );
 create index if not exists workouts_client_date_idx on public.workouts (client_id, workout_date);
 
+-- Drafts: hidden from the client until the trainer publishes them.
+-- Workouts that existed before this column was added stay published;
+-- every NEW workout starts as a draft unless it is saved as published.
+alter table public.workouts add column if not exists is_draft boolean not null default false;
+alter table public.workouts alter column is_draft set default true;
+
 -- Chat messages between you and each client.
 create table if not exists public.messages (
   id         bigint generated always as identity primary key,
@@ -97,7 +103,7 @@ begin
   update public.workouts
      set completed_at = case when p_done then now() else null end
    where id = p_workout_id
-     and (public.is_trainer() or client_id = public.my_client_id());
+     and (public.is_trainer() or (client_id = public.my_client_id() and not is_draft));
   if not found then
     raise exception 'Workout not found';
   end if;
@@ -168,10 +174,11 @@ create policy "clients: trainer writes" on public.clients
   for all to authenticated
   using (public.is_trainer()) with check (public.is_trainer());
 
+-- Clients never see drafts.
 drop policy if exists "workouts: read own or trainer" on public.workouts;
 create policy "workouts: read own or trainer" on public.workouts
   for select to authenticated
-  using (public.is_trainer() or client_id = public.my_client_id());
+  using (public.is_trainer() or (client_id = public.my_client_id() and not is_draft));
 
 drop policy if exists "workouts: trainer writes" on public.workouts;
 create policy "workouts: trainer writes" on public.workouts

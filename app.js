@@ -67,23 +67,29 @@ const goalsBox = (label, text) => h('div', { class: 'goals' }, h('p', { class: '
 const firstName = (name) => (name || '').trim().split(/\s+/)[0] || 'there';
 const clientName = (id) => state.clients.find((c) => c.id === id)?.full_name || 'a client';
 
-function openDialog({ title, fields, submitLabel = 'Save', onSubmit, extra, wide }) {
+// altSubmitLabel adds a second, outlined submit button; onSubmit is then
+// called with 'alt' when that one was pressed and 'primary' otherwise.
+function openDialog({ title, fields, submitLabel = 'Save', altSubmitLabel, onSubmit, extra, wide }) {
   const dlg = h('dialog', { class: 'dialog' + (wide ? ' wide' : '') });
   const err = h('p', { class: 'error', role: 'alert' });
-  const save = h('button', { type: 'submit', class: 'btn primary' }, submitLabel);
+  const save = h('button', { type: 'submit', class: 'btn primary', 'data-action': 'primary' }, submitLabel);
+  const alt = altSubmitLabel ? h('button', { type: 'submit', class: 'btn', 'data-action': 'alt' }, altSubmitLabel) : null;
   const form = h('form', {
     onsubmit: async (e) => {
       e.preventDefault();
+      const action = e.submitter?.dataset.action || 'primary';
       save.disabled = true;
+      if (alt) alt.disabled = true;
       err.textContent = '';
       try {
-        const problem = await onSubmit();
+        const problem = await onSubmit(action);
         if (problem) err.textContent = problem;
         else dlg.close();
       } catch (x) {
         err.textContent = x.message || String(x);
       } finally {
         save.disabled = false;
+        if (alt) alt.disabled = false;
       }
     },
   },
@@ -94,6 +100,7 @@ function openDialog({ title, fields, submitLabel = 'Save', onSubmit, extra, wide
       extra || h('span'),
       h('div', { class: 'actions' },
         h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+        alt,
         save)));
   dlg.append(form);
   dlg.addEventListener('close', () => dlg.remove());
@@ -484,11 +491,14 @@ async function renderTrainerWorkouts(body, c) {
   const list = h('div', { class: 'stack' }, h('p', { class: 'muted' }, 'Loading…'));
   const refresh = () => renderTrainerWorkouts(body, c);
   const reminder = h('div');
+  const publishAll = h('span');
   body.replaceChildren(
     reminder,
     h('div', { class: 'row-between' },
       h('h3', {}, 'Workouts'),
-      h('button', { class: 'btn primary', onclick: () => openWorkoutEditor(c, null, refresh) }, '+ New workout')),
+      h('div', { class: 'actions' },
+        publishAll,
+        h('button', { class: 'btn primary', onclick: () => openWorkoutEditor(c, null, refresh) }, '+ New workout'))),
     list);
   // A private reminder of injuries while planning (from the consult notes).
   sb.from('client_notes').select('injuries').eq('client_id', c.id).maybeSingle().then(({ data }) => {
@@ -504,11 +514,31 @@ async function renderTrainerWorkouts(body, c) {
     list.replaceChildren(h('p', { class: 'muted' }, `No workouts yet. Create ${firstName(c.full_name)}'s first one.`));
     return;
   }
+  const drafts = data.filter((w) => w.is_draft);
+  if (drafts.length) {
+    publishAll.replaceWith(h('button', {
+      class: 'btn',
+      onclick: async () => {
+        if (!confirm(`Publish ${drafts.length} draft${drafts.length === 1 ? '' : 's'}? ${firstName(c.full_name)} will be able to see ${drafts.length === 1 ? 'it' : 'them'} straight away.`)) return;
+        const { error: pubError } = await sb.from('workouts').update({ is_draft: false }).in('id', drafts.map((w) => w.id));
+        if (pubError) return toast(pubError.message, true);
+        toast(`Published. ${firstName(c.full_name)} can see ${drafts.length === 1 ? 'it' : 'them'} now.`);
+        refresh();
+      },
+    }, `Publish all drafts (${drafts.length})`));
+  }
   list.replaceChildren(...data.map((w) => workoutCard(w, {
     onChange: refresh,
+    trainerFor: c,
     actions: [
       ['Edit', () => openWorkoutEditor(c, w, refresh)],
-      ['Duplicate', () => openWorkoutEditor(c, { ...w, id: undefined, title: `${w.title} (copy)`, workout_date: today(), completed_at: null }, refresh)],
+      ['Duplicate', () => openWorkoutEditor(c, { ...w, id: undefined, title: `${w.title} (copy)`, workout_date: today(), completed_at: null, is_draft: true }, refresh)],
+      ...(w.is_draft ? [] : [['Unpublish', async () => {
+        const { error: upError } = await sb.from('workouts').update({ is_draft: true }).eq('id', w.id);
+        if (upError) return toast(upError.message, true);
+        toast(`Moved back to drafts. ${firstName(c.full_name)} can't see it now.`);
+        refresh();
+      }]]),
       ['Delete', async () => {
         if (!confirm(`Delete "${w.title}"?`)) return;
         const { error: delError } = await sb.from('workouts').delete().eq('id', w.id);
@@ -559,6 +589,8 @@ function openWorkoutEditor(client, workout, onSaved) {
   openDialog({
     title: isNew ? `New workout for ${client.full_name}` : 'Edit workout',
     wide: true,
+    altSubmitLabel: 'Save as draft',
+    submitLabel: workout?.id && !workout.is_draft ? 'Save' : 'Publish',
     fields: [
       field('Title', title),
       field('Date', date, 'Leave empty for a workout they can do any time.'),
@@ -566,7 +598,7 @@ function openWorkoutEditor(client, workout, onSaved) {
       h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Exercises'), exList,
         h('button', { type: 'button', class: 'btn', onclick: () => { rows.push(blankExercise()); drawRows(); exList.lastChild?.querySelector('input')?.focus(); } }, '+ Add exercise')),
     ],
-    onSubmit: async () => {
+    onSubmit: async (action) => {
       const exercises = rows
         .filter((r) => r.name.trim())
         .map((r) => Object.fromEntries(Object.keys(blankExercise()).map((k) => [k, String(r[k] || '').trim()])));
@@ -576,12 +608,15 @@ function openWorkoutEditor(client, workout, onSaved) {
         workout_date: date.value || null,
         notes: notes.value.trim(),
         exercises,
+        is_draft: action === 'alt',
       };
       const { error } = isNew
         ? await sb.from('workouts').insert(payload)
         : await sb.from('workouts').update(payload).eq('id', workout.id);
       if (error) return error.message;
-      toast(isNew ? 'Workout saved' : 'Workout updated');
+      toast(payload.is_draft
+        ? `Saved as a draft. ${firstName(client.full_name)} can't see it yet.`
+        : `Published. ${firstName(client.full_name)} can see it now.`);
       onSaved();
     },
   });
@@ -591,9 +626,10 @@ function openWorkoutEditor(client, workout, onSaved) {
 // Shared: workout card
 // ---------------------------------------------------------------------------
 
-function workoutCard(w, { actions = [], onChange }) {
+function workoutCard(w, { actions = [], onChange, trainerFor }) {
   const exercises = Array.isArray(w.exercises) ? w.exercises : [];
   const done = !!w.completed_at;
+  const draft = !!w.is_draft;
   const meta = (e) => [
     e.sets && `${e.sets} sets`,
     e.reps && `${e.reps} reps`,
@@ -613,12 +649,25 @@ function workoutCard(w, { actions = [], onChange }) {
     },
   }, done ? 'Mark as not done' : 'Mark as done');
 
-  return h('article', { class: 'card workout' + (done ? ' done' : '') },
+  const publish = draft ? h('button', {
+    class: 'btn primary',
+    onclick: async () => {
+      publish.disabled = true;
+      const { error } = await sb.from('workouts').update({ is_draft: false }).eq('id', w.id);
+      publish.disabled = false;
+      if (error) return toast(error.message, true);
+      toast(`Published. ${firstName(trainerFor?.full_name)} can see it now.`);
+      onChange();
+    },
+  }, 'Publish') : null;
+
+  return h('article', { class: 'card workout' + (draft ? ' draft' : done ? ' done' : '') },
     h('div', { class: 'row-between top' },
       h('div', {},
         h('p', { class: 'eyebrow' }, w.workout_date ? formatDate(w.workout_date) : 'Any day'),
         h('h4', {}, w.title),
-        done ? h('span', { class: 'badge' }, `✓ Done · ${formatDateTime(w.completed_at)}`) : null),
+        draft ? h('span', { class: 'badge' }, `Draft · not visible to ${firstName(trainerFor?.full_name)}`) : null,
+        !draft && done ? h('span', { class: 'badge' }, `✓ Done · ${formatDateTime(w.completed_at)}`) : null),
       actions.length ? h('div', { class: 'actions' },
         actions.map(([label, fn]) => h('button', { class: 'btn ghost small' + (label === 'Delete' ? ' danger-text' : ''), onclick: fn }, label))) : null),
     w.notes ? h('p', { class: 'notes' }, w.notes) : null,
@@ -629,7 +678,7 @@ function workoutCard(w, { actions = [], onChange }) {
             meta(e) ? h('span', { class: 'ex-meta' }, meta(e)) : null,
             e.notes ? h('span', { class: 'ex-notes' }, e.notes) : null)))
       : h('p', { class: 'muted small' }, 'No exercises listed.'),
-    h('div', { class: 'row-end' }, toggle));
+    h('div', { class: 'row-end' }, draft ? publish : toggle));
 }
 
 // ---------------------------------------------------------------------------
@@ -650,7 +699,7 @@ function renderClientApp() {
 
 async function renderClientWorkouts(body) {
   body.replaceChildren(h('p', { class: 'muted' }, 'Loading…'));
-  const { data, error } = await sb.from('workouts').select('*').eq('client_id', state.me.id)
+  const { data, error } = await sb.from('workouts').select('*').eq('client_id', state.me.id).eq('is_draft', false)
     .order('workout_date', { ascending: true, nullsFirst: true })
     .order('created_at', { ascending: true });
   if (!body.isConnected) return;

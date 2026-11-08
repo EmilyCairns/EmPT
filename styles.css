@@ -313,6 +313,8 @@ input:focus, textarea:focus {
 .workout .eyebrow { margin-bottom: var(--space-1); }
 /* Completed workouts step DOWN to the canvas colour with a hairline. */
 .workout.done { background: var(--color-surface); border: var(--border-width) solid var(--color-border); }
+/* Drafts: Parchment with a dashed outline, so they read as "not finished". */
+.workout.draft { background: var(--color-surface); border: var(--border-width-strong) dashed var(--color-border); }
 .workout .notes { margin: var(--space-4) 0 0; white-space: pre-wrap; color: var(--color-text-body); }
 .badge {
   display: inline-block;

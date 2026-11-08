@@ -150,6 +150,7 @@ The 64px, 80px and 88px sizes from the reference are for marketing heroes. If Em
 | **Input** | Pill, Parchment fill, 1px Ash border, padding 12px × 20px, Sans 16px Ink, Graphite placeholder. Focus: terracotta border plus a 3px soft terracotta ring. |
 | **Card** (`.card`) | Aged Paper, 24px radius, 32px padding, no border, no shadow. Don't put cards inside cards. |
 | **Workout card** | Eyebrow date, then a serif title, then Charcoal notes, then numbered exercises ("01", "02" in Terracotta Text). Completed workouts step *down* to Parchment with a Taupe outline and a mono "✓ Done" badge. |
+| **Draft workout card** (`.workout.draft`) | Trainer only. Parchment with a 1.5px **dashed** Taupe outline, a mono "Draft · not visible to …" badge, and **Publish** as its primary button in place of "Mark as done". Dashed outlines are reserved for drafts. |
 | **Eyebrow** (`h3`, `.eyebrow`) | All caps, Sans 600 12px, Terracotta Text, 8–12px above what it introduces. |
 | **Goals box** (`.goals`) | Aged Paper panel with an eyebrow label. Used for the client's goals and the trainer's private injuries reminder on the Workouts tab. |
 | **Callout** (`.callout`) | Parchment with a Taupe outline: an eyebrow, one sentence and one small primary button. Used for "No account yet". |

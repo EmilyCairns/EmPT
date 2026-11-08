@@ -59,7 +59,7 @@ Supabase's built-in email sender only allows a few sign-in emails per hour. That
 3. On the **Consult notes** tab, jot quick private notes: injuries and conditions, goals in their words, training history, anything else. **Only you can see these**; the database blocks clients from them entirely. Notes save as you type, and **Copy notes** puts a tidy summary on your clipboard to paste into a chat with Claude.
 4. In **Their goals** on the same tab, write the friendly version the client will see on their page.
 5. When you're ready to give them access, click **Add email**. That creates their account. Send the client the app link. They type their email, tap the link they receive, and they're in. On their phone they can use "Add to Home Screen" to install it like an app.
-6. Choose a client and create workouts with **+ New workout**. Each workout has a title, a date, notes and a list of exercises (sets, reps, load, rest, coaching notes). Use **Duplicate** to reuse a session.
+6. Choose a client and create workouts with **+ New workout**. Each workout has a title, a date, notes and a list of exercises (sets, reps, load, rest, coaching notes). **Save as draft** keeps it hidden from the client until you click **Publish** (or **Publish all drafts**). **Unpublish** hides it again. Use **Duplicate** to reuse a session. You can also ask Claude to write workouts for you: they arrive as drafts for you to check.
 7. The **Chat** tab is a private conversation with that client. A terracotta dot next to a client means they've sent a message you haven't opened yet.
 
 Only emails you've added as clients can create an account. Anyone else is turned away.
