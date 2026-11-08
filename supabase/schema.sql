@@ -3,8 +3,9 @@
 -- Run this once in Supabase: SQL Editor -> New query -> paste -> Run.
 -- It is safe to run again later (e.g. after pulling an update).
 --
--- BEFORE RUNNING: change 'you@example.com' near the bottom (section 7)
+-- FIRST TIME ONLY: change 'you@example.com' near the bottom (section 7)
 -- to the email address YOU (the trainer) will sign in with.
+-- When re-running to apply an update, you can leave it as it is.
 -- =====================================================================
 
 -- 1. Tables ------------------------------------------------------------
@@ -15,14 +16,29 @@ create table if not exists public.trainers (
 );
 
 -- Your clients. A client signs in with the email stored here.
+-- Email is optional: you can create a client at their first consult and
+-- add the email later, which is what lets them sign in.
 create table if not exists public.clients (
   id         uuid primary key default gen_random_uuid(),
-  email      text not null,
+  email      text,
   full_name  text not null check (char_length(full_name) between 1 and 100),
   goals      text not null default '',
   created_at timestamptz not null default now()
 );
+alter table public.clients alter column email drop not null;  -- for databases created before this change
 create unique index if not exists clients_email_key on public.clients (lower(email));
+
+-- PRIVATE consult notes. Only the trainer can ever read or write these;
+-- clients have no access at all (see section 4).
+create table if not exists public.client_notes (
+  client_id    uuid primary key references public.clients (id) on delete cascade,
+  consult_date date,
+  injuries     text not null default '',  -- injuries, conditions, medication
+  goals        text not null default '',  -- goals in the client's own words
+  lifestyle    text not null default '',  -- training history, job, availability
+  other        text not null default '',
+  updated_at   timestamptz not null default now()
+);
 
 -- Workouts. "exercises" is a list of
 -- { name, sets, reps, load, rest, notes } objects.
@@ -104,6 +120,11 @@ create trigger workouts_touch_updated_at
   before update on public.workouts
   for each row execute function public.touch_updated_at();
 
+drop trigger if exists client_notes_touch_updated_at on public.client_notes;
+create trigger client_notes_touch_updated_at
+  before update on public.client_notes
+  for each row execute function public.touch_updated_at();
+
 -- 3. Invite-only sign-up ----------------------------------------------
 -- Only the trainer and clients you've added can create an account.
 create or replace function public.only_invited_signups()
@@ -130,6 +151,12 @@ alter table public.trainers enable row level security;
 alter table public.clients  enable row level security;
 alter table public.workouts enable row level security;
 alter table public.messages enable row level security;
+alter table public.client_notes enable row level security;
+
+drop policy if exists "client_notes: trainer only" on public.client_notes;
+create policy "client_notes: trainer only" on public.client_notes
+  for all to authenticated
+  using (public.is_trainer()) with check (public.is_trainer());
 
 drop policy if exists "clients: read own or trainer" on public.clients;
 create policy "clients: read own or trainer" on public.clients
@@ -165,8 +192,8 @@ create policy "messages: send as yourself" on public.messages
   );
 
 -- 5. Permissions ------------------------------------------------------
-revoke all on public.trainers, public.clients, public.workouts, public.messages from anon, authenticated;
-grant select, insert, update, delete on public.clients, public.workouts to authenticated;
+revoke all on public.trainers, public.clients, public.workouts, public.messages, public.client_notes from anon, authenticated;
+grant select, insert, update, delete on public.clients, public.workouts, public.client_notes to authenticated;
 grant select, insert on public.messages to authenticated;
 
 revoke execute on function public.set_workout_completed(uuid, boolean) from public, anon;
@@ -187,6 +214,16 @@ end;
 $$;
 
 -- 7. Make yourself the trainer -------------------------------------------
--- CHANGE THIS to the email you will sign in with:
-insert into public.trainers (email) values (lower('you@example.com'))
-on conflict do nothing;
+-- FIRST TIME: change you@example.com to the email you will sign in with.
+-- Re-running with the placeholder left in is safe: it is skipped.
+do $$
+declare
+  trainer_email text := 'you@example.com';
+begin
+  if lower(trainer_email) = 'you@example.com' then
+    raise notice 'Trainer email left as the placeholder, so no trainer was added.';
+  else
+    insert into public.trainers (email) values (lower(trainer_email)) on conflict do nothing;
+  end if;
+end;
+$$;

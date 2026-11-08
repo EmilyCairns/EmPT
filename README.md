@@ -55,12 +55,18 @@ Supabase's built-in email sender only allows a few sign-in emails per hour. That
 ## Everyday use
 
 1. Open the app and sign in with your trainer email.
-2. **+ Add client:** enter their name and the email they'll use.
-3. Send the client the app link. They type their email, tap the link they receive, and they're in. On their phone they can use "Add to Home Screen" to install it like an app.
-4. Choose a client and create workouts with **+ New workout**. Each workout has a title, a date, notes and a list of exercises (sets, reps, load, rest, coaching notes). Use **Duplicate** to reuse a session.
-5. The **Chat** tab is a private conversation with that client. A red dot next to a client means they've sent a message you haven't opened yet.
+2. **+ New client** after a first consult: enter their name. Email is optional at this point.
+3. On the **Consult notes** tab, jot quick private notes: injuries and conditions, goals in their words, training history, anything else. **Only you can see these**; the database blocks clients from them entirely. Notes save as you type, and **Copy notes** puts a tidy summary on your clipboard to paste into a chat with Claude.
+4. In **Their goals** on the same tab, write the friendly version the client will see on their page.
+5. When you're ready to give them access, click **Add email**. That creates their account. Send the client the app link. They type their email, tap the link they receive, and they're in. On their phone they can use "Add to Home Screen" to install it like an app.
+6. Choose a client and create workouts with **+ New workout**. Each workout has a title, a date, notes and a list of exercises (sets, reps, load, rest, coaching notes). Use **Duplicate** to reuse a session.
+7. The **Chat** tab is a private conversation with that client. A terracotta dot next to a client means they've sent a message you haven't opened yet.
 
 Only emails you've added as clients can create an account. Anyone else is turned away.
+
+## Applying app updates to the database
+
+Some updates (like the consult notes) need a database change. When that happens, open `supabase/schema.sql` from this repo, paste the whole file into Supabase's **SQL Editor** again and click **Run**. This is safe to repeat: it keeps all your data, and you can leave `you@example.com` as it is, because your trainer email is already saved.
 
 ## Trying it locally
 

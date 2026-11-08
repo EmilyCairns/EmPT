@@ -118,7 +118,7 @@ function header() {
     h('div', { class: 'brand' }, h('img', { src: 'icon.svg', alt: '', width: '28', height: '28' }), APP_NAME),
     h('div', { class: 'topbar-right' },
       h('span', { class: 'muted small hide-narrow' }, state.session.user.email),
-      h('button', { class: 'btn ghost small', onclick: () => sb.auth.signOut() }, 'Sign out')));
+      h('button', { class: 'btn ghost small', onclick: async () => { await flushPendingSaves(); sb.auth.signOut(); } }, 'Sign out')));
 }
 
 function closeChat() {
@@ -249,7 +249,7 @@ function renderTrainerApp() {
     h('aside', { class: 'sidebar' },
       h('div', { class: 'sidebar-head' },
         h('h2', { class: 'eyebrow' }, 'Clients'),
-        h('button', { class: 'btn primary small', onclick: () => openClientDialog() }, '+ Add client')),
+        h('button', { class: 'btn primary small', onclick: () => openClientDialog() }, '+ New client')),
       ui.list),
     ui.panel);
   mount(header(), ui.layout);
@@ -260,7 +260,7 @@ function renderTrainerApp() {
 function renderClientList() {
   ui.layout.classList.toggle('has-selection', !!state.selectedId);
   if (!state.clients.length) {
-    ui.list.replaceChildren(h('p', { class: 'muted pad' }, 'No clients yet. Add your first client to get started.'));
+    ui.list.replaceChildren(h('p', { class: 'muted pad' }, 'No clients yet. Tap "+ New client" to start their consult notes.'));
     return;
   }
   ui.list.replaceChildren(...state.clients.map((c) =>
@@ -269,54 +269,99 @@ function renderClientList() {
       onclick: () => selectClient(c.id),
     },
       h('span', { class: 'client-name' }, c.full_name, state.unread.has(c.id) ? h('span', { class: 'dot', title: 'New message' }) : null),
-      h('span', { class: 'muted small' }, c.email))));
+      h('span', { class: 'muted small' }, c.email || 'No account yet'))));
 }
 
 function selectClient(id) {
+  const c = state.clients.find((x) => x.id === id);
   state.selectedId = id;
-  state.tab = state.unread.has(id) ? 'chat' : 'workouts';
+  state.tab = state.unread.has(id) ? 'chat' : c?.email ? 'workouts' : 'notes';
   renderClientList();
   renderPanel();
 }
 
+// Autosaving fields register a flush function here, so switching client,
+// tab or page never loses what was just typed.
+const pendingSaves = new Set();
+function flushPendingSaves() {
+  return Promise.all([...pendingSaves].map((flush) => flush()));
+}
+window.addEventListener('beforeunload', (e) => {
+  if (!pendingSaves.size) return;
+  flushPendingSaves();
+  e.preventDefault();
+});
+
+function autosaver(save, statusEl) {
+  let timer = null;
+  let running = Promise.resolve();
+  const flush = () => {
+    if (!timer) return running;
+    clearTimeout(timer);
+    timer = null;
+    pendingSaves.delete(flush);
+    statusEl.textContent = 'Saving…';
+    running = running.then(save).then(
+      () => { statusEl.textContent = `Saved ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`; },
+      (err) => { statusEl.textContent = 'Not saved'; toast(`Couldn't save: ${err.message}`, true); });
+    return running;
+  };
+  const schedule = () => {
+    clearTimeout(timer);
+    timer = setTimeout(flush, 800);
+    pendingSaves.add(flush);
+    statusEl.textContent = 'Editing…';
+  };
+  return { schedule, flush };
+}
+
 function renderPanel() {
   closeChat();
+  flushPendingSaves();
   const c = state.clients.find((x) => x.id === state.selectedId);
   if (!c) {
-    ui.panel.replaceChildren(h('div', { class: 'empty' }, h('p', { class: 'muted' }, 'Choose a client to see their workouts and chat.')));
+    ui.panel.replaceChildren(h('div', { class: 'empty' }, h('p', { class: 'muted' }, 'Choose a client to see their notes, workouts and chat.')));
     return;
   }
+  const hasAccount = !!c.email;
+  const tabList = [['notes', 'Consult notes'], ['workouts', 'Workouts']];
+  if (hasAccount) tabList.push(['chat', 'Chat']);
+  if (!tabList.some(([key]) => key === state.tab)) state.tab = 'notes';
   if (state.tab === 'chat' && state.unread.delete(c.id)) renderClientList();
 
   const body = h('div', { class: 'tab-body' });
-  ui.panel.replaceChildren(
+  fill(ui.panel,
     h('div', { class: 'panel-head' },
       h('button', {
         class: 'btn ghost small back',
-        onclick: () => { state.selectedId = null; renderClientList(); renderPanel(); },
+        onclick: () => { flushPendingSaves(); state.selectedId = null; renderClientList(); renderPanel(); },
       }, '← Clients'),
       h('div', { class: 'panel-title' },
         h('h2', {}, c.full_name),
-        h('p', { class: 'muted small' }, c.email),
-        c.goals ? goalsBox('Goals', c.goals) : null),
+        h('p', { class: 'muted small' }, c.email || 'No account yet')),
       h('button', { class: 'btn ghost small', onclick: () => openClientDialog(c) }, 'Edit client')),
-    tabs([['workouts', 'Workouts'], ['chat', 'Chat']], renderPanel),
+    hasAccount ? null : h('div', { class: 'callout' },
+      h('div', {},
+        h('p', { class: 'eyebrow' }, 'No account yet'),
+        h('p', {}, `When you're ready, add ${firstName(c.full_name)}'s email to create their account. They can then sign in to see their workouts and goals.`)),
+      h('button', { class: 'btn primary small', onclick: () => openClientDialog(c, { focusEmail: true }) }, 'Add email')),
+    tabs(tabList, renderPanel),
     body);
 
-  if (state.tab === 'workouts') renderTrainerWorkouts(body, c);
+  if (state.tab === 'notes') renderConsultNotes(body, c);
+  else if (state.tab === 'workouts') renderTrainerWorkouts(body, c);
   else renderChat(body, c.id, 'trainer');
 }
 
-function openClientDialog(c) {
+function openClientDialog(c, { focusEmail = false } = {}) {
   const name = h('input', { required: true, maxlength: '100', value: c?.full_name || '', autocomplete: 'off' });
-  const email = h('input', { type: 'email', required: true, value: c?.email || '', autocomplete: 'off' });
-  const goals = h('textarea', { rows: '3', value: c?.goals || '', placeholder: 'e.g. Build strength for a 10k, recovering from knee injury' });
+  const email = h('input', { type: 'email', value: c?.email || '', autocomplete: 'off', placeholder: 'Add now or later' });
   let dlg;
   const extra = c ? h('button', {
     type: 'button',
     class: 'btn danger',
     onclick: async () => {
-      if (!confirm(`Delete ${c.full_name}? This also deletes their workouts and chat history.`)) return;
+      if (!confirm(`Delete ${c.full_name}? This also deletes their consult notes, workouts and chat history.`)) return;
       const { error } = await sb.from('clients').delete().eq('id', c.id);
       if (error) return toast(error.message, true);
       dlg.close();
@@ -328,16 +373,19 @@ function openClientDialog(c) {
     },
   }, 'Delete client') : null;
 
+  const emailHint = c?.email
+    ? 'This is the email they sign in with. Clearing it removes their access.'
+    : "Adding an email creates their account. Then send them the app link so they can sign in.";
+
   dlg = openDialog({
-    title: c ? 'Edit client' : 'Add client',
+    title: c ? 'Edit client' : 'New client',
     fields: [
       field('Full name', name),
-      field('Email', email, c ? 'Changing this changes the email they sign in with.' : 'Your client signs in with this email. Send them the app link once added.'),
-      field('Goals and notes (visible to the client)', goals),
+      field('Email (optional)', email, emailHint),
     ],
     extra,
     onSubmit: async () => {
-      const row = { full_name: name.value.trim(), email: email.value.trim().toLowerCase(), goals: goals.value.trim() };
+      const row = { full_name: name.value.trim(), email: email.value.trim().toLowerCase() || null };
       const query = c
         ? sb.from('clients').update(row).eq('id', c.id).select().single()
         : sb.from('clients').insert(row).select().single();
@@ -345,22 +393,107 @@ function openClientDialog(c) {
       if (error) return error.code === '23505' ? 'A client with that email already exists.' : error.message;
       await loadClients();
       state.selectedId = data.id;
-      if (!c) state.tab = 'workouts';
+      if (!c) state.tab = 'notes';
       renderClientList();
       renderPanel();
-      toast(c ? 'Client updated' : `${row.full_name} added`);
+      if (!c) toast(`${row.full_name} added. Start your consult notes.`);
+      else if (!c.email && row.email) toast(`Account created. Send ${firstName(row.full_name)} the app link to sign in.`);
+      else toast('Client updated');
     },
   });
+  if (focusEmail) email.focus();
+}
+
+// ---------------------------------------------------------------------------
+// Trainer: private consult notes
+// ---------------------------------------------------------------------------
+
+const NOTE_FIELDS = [
+  ['injuries', 'Injuries and conditions', 'e.g. L knee ACL repair 2022, no deep lunges yet. Asthma, carries inhaler.'],
+  ['goals', 'Goals (in their words)', 'e.g. 10k in May, feel stronger, lift the kids without back pain'],
+  ['lifestyle', 'Training history and lifestyle', 'e.g. Ran at uni, gym on and off. Desk job. Free Mon/Wed eve + Sat am'],
+  ['other', 'Other notes', 'Anything else worth remembering'],
+];
+
+async function renderConsultNotes(body, c) {
+  body.replaceChildren(h('p', { class: 'muted' }, 'Loading…'));
+  const { data, error } = await sb.from('client_notes').select('*').eq('client_id', c.id).maybeSingle();
+  if (!body.isConnected) return;
+  if (error) { body.replaceChildren(h('p', { class: 'error' }, error.message)); return; }
+  const notes = data || {};
+  const first = firstName(c.full_name);
+
+  // Private notes: only the trainer can read these (enforced by the database).
+  const status = h('span', { class: 'muted small', 'aria-live': 'polite' });
+  const inputs = {};
+  const saveNotes = autosaver(async () => {
+    const row = { client_id: c.id, consult_date: inputs.consult_date.value || null };
+    for (const [key] of NOTE_FIELDS) row[key] = inputs[key].value;
+    const { error: saveError } = await sb.from('client_notes').upsert(row);
+    if (saveError) throw saveError;
+  }, status);
+  const autosave = { oninput: saveNotes.schedule, onblur: saveNotes.flush };
+  inputs.consult_date = h('input', { type: 'date', value: notes.consult_date || (data ? '' : today()), ...autosave });
+  for (const [key, , placeholder] of NOTE_FIELDS) {
+    inputs[key] = h('textarea', { rows: '4', value: notes[key] || '', placeholder, ...autosave });
+  }
+
+  // Goals the client sees on their own page.
+  const sharedStatus = h('span', { class: 'muted small', 'aria-live': 'polite' });
+  const goals = h('textarea', { rows: '4', value: c.goals || '', placeholder: 'e.g. Run your first 10k in May, feeling strong and pain-free.' });
+  const saveGoals = autosaver(async () => {
+    const value = goals.value.trim();
+    const { error: saveError } = await sb.from('clients').update({ goals: value }).eq('id', c.id);
+    if (saveError) throw saveError;
+    c.goals = value;
+  }, sharedStatus);
+  goals.addEventListener('input', saveGoals.schedule);
+  goals.addEventListener('blur', saveGoals.flush);
+
+  const copyNotes = async () => {
+    const text = [
+      `Client: ${c.full_name}`,
+      `Consult date: ${inputs.consult_date.value ? formatDate(inputs.consult_date.value) : 'not set'}`,
+      ...NOTE_FIELDS.map(([key, label]) => `## ${label}\n${inputs[key].value.trim() || '(none)'}`),
+      `## Goals shown to ${first}\n${goals.value.trim() || '(none yet)'}`,
+    ].join('\n\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      toast('Notes copied. Paste them into a chat with Claude to plan workouts or polish the goals.');
+    } catch {
+      toast("Couldn't copy automatically. Select the text and copy it instead.", true);
+    }
+  };
+
+  body.replaceChildren(h('div', { class: 'stack' },
+    h('section', { class: 'card notes-card' },
+      h('div', { class: 'row-between' }, h('p', { class: 'eyebrow' }, 'Private · only you see this'), status),
+      h('h4', {}, 'Initial consult'),
+      h('p', { class: 'muted small' }, 'Quick notes are fine. They save as you type.'),
+      field('Consult date', inputs.consult_date),
+      NOTE_FIELDS.map(([key, label]) => field(label, inputs[key])),
+      h('div', { class: 'row-end' }, h('button', { class: 'btn small', onclick: copyNotes }, 'Copy notes'))),
+    h('section', { class: 'card shared-card' },
+      h('div', { class: 'row-between' }, h('p', { class: 'eyebrow' }, `Visible to ${first}`), sharedStatus),
+      h('h4', {}, 'Their goals'),
+      h('p', { class: 'muted small' }, `This appears at the top of ${first}'s page as "Your goals". Rewrite the key points from your notes in a friendly, encouraging way.`),
+      field('Goals', goals))));
 }
 
 async function renderTrainerWorkouts(body, c) {
   const list = h('div', { class: 'stack' }, h('p', { class: 'muted' }, 'Loading…'));
   const refresh = () => renderTrainerWorkouts(body, c);
+  const reminder = h('div');
   body.replaceChildren(
+    reminder,
     h('div', { class: 'row-between' },
       h('h3', {}, 'Workouts'),
       h('button', { class: 'btn primary', onclick: () => openWorkoutEditor(c, null, refresh) }, '+ New workout')),
     list);
+  // A private reminder of injuries while planning (from the consult notes).
+  sb.from('client_notes').select('injuries').eq('client_id', c.id).maybeSingle().then(({ data }) => {
+    if (data?.injuries?.trim() && reminder.isConnected) reminder.replaceWith(goalsBox('Injuries and conditions · private', data.injuries.trim()));
+  });
 
   const { data, error } = await sb.from('workouts').select('*').eq('client_id', c.id)
     .order('workout_date', { ascending: false, nullsFirst: true })

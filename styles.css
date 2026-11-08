@@ -256,6 +256,30 @@ input:focus, textarea:focus {
 
 .empty { padding: var(--space-12) 0; text-align: center; }
 
+/* "No account yet" prompt at the top of a client's panel. */
+.callout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-bottom: var(--space-2);
+  padding: var(--space-4) var(--space-6);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-cards);
+}
+.callout p { margin: 0; }
+.callout .eyebrow { margin-bottom: var(--space-1); }
+.callout > div { flex: 1; min-width: 0; }
+
+/* Consult notes: private notes on Aged Paper, client-visible goals on
+   Parchment with a hairline, so the two never look alike. */
+.notes-card h4, .shared-card h4 { margin-top: var(--space-2); }
+.notes-card > .muted, .shared-card > .muted { margin-bottom: var(--space-6); }
+.notes-card .row-between .eyebrow, .shared-card .row-between .eyebrow { margin: 0; }
+.shared-card { background: var(--color-surface); border: var(--border-width) solid var(--color-border); }
+.tab-body > .goals:first-child { margin: 0 0 var(--space-2); }
+
 .client-main { width: 100%; max-width: var(--reading-max-width); margin: 0 auto; padding: var(--space-10) var(--gutter) var(--space-16); }
 
 /* ---- Tabs ------------------------------------------------------------- */

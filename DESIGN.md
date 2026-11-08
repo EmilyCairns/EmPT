@@ -151,7 +151,10 @@ The 64px, 80px and 88px sizes from the reference are for marketing heroes. If Em
 | **Card** (`.card`) | Aged Paper, 24px radius, 32px padding, no border, no shadow. Don't put cards inside cards. |
 | **Workout card** | Eyebrow date, then a serif title, then Charcoal notes, then numbered exercises ("01", "02" in Terracotta Text). Completed workouts step *down* to Parchment with a Taupe outline and a mono "✓ Done" badge. |
 | **Eyebrow** (`h3`, `.eyebrow`) | All caps, Sans 600 12px, Terracotta Text, 8–12px above what it introduces. |
-| **Goals box** (`.goals`) | Aged Paper panel with a "Your goals" eyebrow. |
+| **Goals box** (`.goals`) | Aged Paper panel with an eyebrow label. Used for the client's goals and the trainer's private injuries reminder on the Workouts tab. |
+| **Callout** (`.callout`) | Parchment with a Taupe outline: an eyebrow, one sentence and one small primary button. Used for "No account yet". |
+| **Private vs visible cards** | Private trainer content (consult notes) sits on an Aged Paper `.card` with a "Private · only you see this" eyebrow. Content the client will see sits on a Parchment `.shared-card` with a Taupe outline and a "Visible to …" eyebrow. Never style them alike. |
+| **Autosave status** | Small Graphite text, top right of the card it belongs to: "Editing…", "Saving…", "Saved 9:50 AM" or "Not saved". |
 | **Badge** (`.badge`) | Mono 11px all caps, Taupe pill outline, Terracotta Text. Up to about four words. |
 | **Tabs** (`.tabs`) | Sans 600, Graphite. The active tab is Ink with a 2px terracotta underline, on a Taupe hairline. |
 | **Client list item** | 12px radius. On hover or when selected: an Aged Paper wash, and the selected name turns Terracotta Text. |
