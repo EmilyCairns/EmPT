@@ -198,6 +198,11 @@ grant select, insert on public.messages to authenticated;
 
 revoke execute on function public.set_workout_completed(uuid, boolean) from public, anon;
 grant execute on function public.set_workout_completed(uuid, boolean) to authenticated;
+-- Signed-out visitors need no helper functions. The sign-up guard is a
+-- trigger function and is never called directly.
+revoke execute on function public.is_trainer() from public, anon;
+revoke execute on function public.my_client_id() from public, anon;
+revoke execute on function public.only_invited_signups() from public, anon, authenticated;
 grant execute on function public.is_trainer(), public.my_client_id() to authenticated;
 
 -- 6. Live chat ----------------------------------------------------------
