@@ -108,7 +108,11 @@ begin
   if to_regclass('public.sessions') is not null then
     execute format($q$
       insert into public.sessions (client_id, starts_at, duration_min, location, notes) values
-        (%1$L, ((current_date + 1) + time '18:00') at time zone %2$L, 60, 'Studio', 'Tomorrow: within 24 hours, to see the late-cancellation reminder.'),
+        -- Today at 6pm (or, if that's under an hour away, in about 20 hours).
+        (%1$L, case when (current_date + time '18:00') at time zone %2$L > now() + interval '1 hour'
+                    then (current_date + time '18:00') at time zone %2$L
+                    else date_trunc('hour', now() + interval '20 hours') end,
+         60, 'Studio', 'Less than 24 hours away, to show the late-cancellation reminder.'),
         (%1$L, (%3$L::date + time '18:00') at time zone %2$L, 60, 'Studio', 'Bring trainers and water.'),
         (%1$L, ((%3$L::date + 5) + time '09:00') at time zone %2$L, 45, 'Park', 'Outdoor conditioning.'),
         (%1$L, ((%3$L::date + 7) + time '18:00') at time zone %2$L, 60, 'Studio', '')
