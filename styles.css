@@ -931,6 +931,52 @@ body.is-dragging { cursor: grabbing; -webkit-user-select: none; user-select: non
 .workout-page > .muted.small { margin-bottom: var(--space-6); }
 .workout-page .card.log-ex { padding: var(--space-6); border-top: 0; }
 .workout-page .log-ex h2 { margin: 0 0 var(--space-1); }
+/* The exercise name: big terracotta serif, and a link to that lift's history. */
+.ex-title {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent-text);
+  font-family: var(--font-display);
+  font-size: var(--text-heading);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-heading);
+  letter-spacing: normal;
+  text-align: left;
+  cursor: pointer;
+}
+.ex-title:hover { text-decoration: underline; text-decoration-thickness: var(--border-width); text-underline-offset: var(--space-1); }
+.ex-title:focus-visible { outline: var(--border-width-strong) solid var(--color-focus); outline-offset: var(--space-1); border-radius: var(--radius-nav); }
+.ex-title-more { font-family: var(--font-body); font-size: var(--text-body-sm); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-body); white-space: nowrap; }
+/* Last time's numbers for a set, right under its inputs. */
+.set-prev { grid-column: 2 / -1; margin: calc(-1 * var(--space-1)) 0 var(--space-1); color: var(--color-text-muted); font-size: var(--text-body-sm); text-align: left; }
+.set-prev.more { margin: 0; }
+/* A lift's history dialog. */
+.lift-history .eyebrow { margin: 0 0 var(--space-1); }
+.lift-history h2 { margin-bottom: var(--space-5); }
+.lift-history h2:focus { outline: none; }
+.lift-history h3 { margin: var(--space-6) 0 var(--space-2); }
+.lift-history .stats > div { background: var(--color-surface-raised); }
+.history-session { margin-top: var(--space-4); }
+.history-session .eyebrow { margin: 0 0 var(--space-1); }
+.history-list { margin: 0; padding: 0; list-style: none; }
+.history-list li {
+  display: grid;
+  grid-template-columns: calc(var(--space-16) + var(--space-2)) 1fr auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: var(--border-width) solid var(--color-border);
+  font-variant-numeric: tabular-nums;
+}
+.history-list li:last-child { border-bottom: 0; }
+.history-list .badge { margin: 0; }
+.history-rms .history-list li { grid-template-columns: calc(var(--space-16) + var(--space-2)) auto 1fr; }
+.history-rms .history-list li > :last-child { text-align: right; }
 .workout-page .log-ex .ex-notes { margin: var(--space-2) 0 0; }
 .rest-pick { margin-top: var(--space-2); }
 .workout-finish { margin-top: var(--space-8); }

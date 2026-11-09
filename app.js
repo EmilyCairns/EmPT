@@ -1547,6 +1547,64 @@ function openLogDialog(w, { clientId, maxes, logs, feedback = null, asTrainer, o
 }
 
 // The sets from the most recent other workout in which this exercise was logged.
+const prevSetText = (l) => [
+  l.weight_kg != null ? kg(l.weight_kg) : null,
+  l.reps != null ? `× ${l.reps}` : null,
+  l.rpe != null ? `· effort ${Number(l.rpe)}` : null,
+].filter(Boolean).join(' ') || 'not filled in';
+
+// Every set they've logged for one lift, plus their rep maxes for it.
+// Opens over the workout page, so nothing they've entered is lost.
+function openLiftHistory(e, { logs, maxes }) {
+  const lib = findLib(e);
+  const mine = logs.filter((l) => (lib && l.exercise_id === lib.id) || libKey(l.exercise_name) === libKey(e.name));
+  const sessions = new Map();
+  for (const l of mine) {
+    if (!sessions.has(l.workout_id)) sessions.set(l.workout_id, []);
+    sessions.get(l.workout_id).push(l);
+  }
+  const list = [...sessions.values()]
+    .map((sets) => ({ sets: sets.sort((a, b) => a.set_number - b.set_number), at: sets.reduce((m, l) => (l.created_at < m ? l.created_at : m), sets[0].created_at) }))
+    .sort((a, b) => b.at.localeCompare(a.at));
+  const weighted = mine.filter((l) => l.weight_kg > 0 && l.reps >= 1);
+  const heaviest = weighted.reduce((best, l) => (!best || Number(l.weight_kg) > Number(best.weight_kg) ? l : best), null);
+  const bestSet = weighted.reduce((best, l) => (!best || epley1rm(Number(l.weight_kg), l.reps) > epley1rm(Number(best.weight_kg), best.reps) ? l : best), null);
+  const rms = lib ? [...latestMaxes(maxes, lib.id).values()].sort((a, b) => a.reps - b.reps) : [];
+  const e1rm = Math.max(bestSet ? epley1rm(Number(bestSet.weight_kg), bestSet.reps) : 0, lib ? bestE1rm(latestMaxes(maxes, lib.id)) : 0);
+  const dateText = (iso) => dateOf(dayKey(new Date(iso))).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+
+  const dlg = h('dialog', { class: 'dialog wide lift-history', 'aria-labelledby': 'lift-history-title' },
+    h('p', { class: 'eyebrow' }, 'Your history'),
+    h('h2', { id: 'lift-history-title', tabindex: '-1' }, e.name),
+    h('div', { class: 'stats' },
+      h('div', {}, h('b', {}, heaviest ? String(Number(heaviest.weight_kg)) : '–'), h('span', {}, heaviest ? `kg heaviest (× ${heaviest.reps})` : 'kg heaviest')),
+      h('div', {}, h('b', {}, e1rm ? String(Math.round(e1rm * 2) / 2) : '–'), h('span', {}, 'kg best est. 1RM')),
+      h('div', {}, h('b', {}, String(list.length)), h('span', {}, list.length === 1 ? 'workout logged' : 'workouts logged'))),
+    rms.length ? h('section', { class: 'history-rms' },
+      h('h3', {}, 'Rep maxes'),
+      h('ul', { class: 'history-list' }, rms.map((m) => h('li', {},
+        h('b', {}, `${m.reps}RM`),
+        h('span', {}, kg(m.weight_kg)),
+        h('span', { class: 'muted small' }, `${formatDate(m.tested_on)} · ${SOURCE_LABEL[m.source] || ''}`))))) : null,
+    h('section', {},
+      h('h3', {}, 'Every set'),
+      list.length
+        ? list.map(({ sets, at }) => h('div', { class: 'history-session' },
+            h('p', { class: 'eyebrow' }, dateText(at)),
+            h('ul', { class: 'history-list' }, sets.map((l, j) => h('li', {},
+              h('b', {}, `Set ${j + 1}`),
+              h('span', {}, prevSetText(l)),
+              l === bestSet ? h('span', { class: 'badge' }, 'Best') : h('span'))))))
+        : h('p', { class: 'muted' }, 'Nothing logged yet. Your sets will show here once you save a workout with this lift.')),
+    h('form', { method: 'dialog', class: 'dialog-actions' }, h('span'), h('button', { class: 'btn primary' }, 'Close')));
+  dlg.addEventListener('close', () => dlg.remove());
+  document.body.append(dlg);
+  dlg.showModal();
+  // Start at the top (not at the Close button), with the lift's name focused.
+  dlg.querySelector('h2').focus();
+  dlg.scrollTop = 0;
+}
+
 function previousSets(w, e, logs) {
   const lib = findLib(e);
   const same = logs.filter((l) => l.workout_id !== w.id
@@ -1927,7 +1985,7 @@ async function renderWorkoutPage() {
       oninput: (ev) => { r[key] = ev.target.value; persist(); if (key === 'weight') plates?.update(ev.target.value || planKg); },
       onfocus: () => { if (key === 'weight') plates?.update(r.weight || planKg); },
     });
-    const draw = () => setsEl.replaceChildren(
+    const draw = () => fill(setsEl,
       h('div', { class: 'set-row set-head', 'aria-hidden': 'true' }, h('span', {}, 'Set'), h('span', {}, 'kg'), h('span', {}, 'Reps'), h('span', {}, 'Effort'), h('span', {}, 'Done')),
       ...rows.map((r, j) => h('div', { class: 'set-row' + (r.done ? ' done' : '') },
         h('span', { class: 'set-num' }, String(j + 1)),
@@ -1951,17 +2009,27 @@ async function renderWorkoutPage() {
             draw();
             plates?.update(latestWeight());
           },
-        }, '✓'))));
+        }, '✓'),
+        // What they did on this set last time, right under where they fill it in.
+        previous?.[j] ? h('p', { class: 'set-prev' }, `Last time: ${prevSetText(previous[j])}`) : null)),
+      previous && previous.length > rows.length
+        ? h('p', { class: 'set-prev more' }, `Last time you also did: ${previous.slice(rows.length).map(prevSetText).join(' · ')}`)
+        : null);
     draw();
     plates?.update(latestWeight());
 
     const el = h('section', { class: 'card log-ex' },
       h('p', { class: 'eyebrow' }, String(i + 1).padStart(2, '0')),
-      h('h2', {}, e.name),
+      h('h2', {}, h('button', {
+        type: 'button',
+        class: 'ex-title',
+        'aria-label': `${e.name}: see your history for this lift`,
+        onclick: () => openLiftHistory(e, ctx),
+      }, e.name, h('span', { class: 'ex-title-more', 'aria-hidden': 'true' }, 'History ›'))),
       prescription(e) ? h('p', { class: 'ex-meta' }, prescription(e)) : null,
       target ? h('p', { class: 'ex-target' }, targetText(target, null)) : null,
       e.notes ? h('p', { class: 'ex-notes' }, e.notes) : null,
-      previous ? h('p', { class: 'muted small' }, `Last time: ${previous.map(setText).join(' · ')}`) : null,
+      previous ? h('p', { class: 'muted small' }, `Last time was ${shortDay(dayKey(new Date(previous[0].created_at)))}. It's shown under each set.`) : null,
       howTo(e),
       rest ? h('button', { type: 'button', class: 'btn ghost small rest-pick', onclick: () => timer.setDuration(rest) }, `Use ${clockText(rest)} rest`) : null,
       plates?.el,
