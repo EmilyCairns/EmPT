@@ -414,6 +414,49 @@ input:focus, textarea:focus, select:focus {
   font-weight: var(--weight-semibold);
 }
 .chip.estimate { border-style: dashed; color: var(--color-text-muted); }
+
+/* Tap-to-select options (the "how were you feeling?" check-in). Selected
+   options use the terracotta active state. */
+.chip-toggle {
+  appearance: none;
+  min-height: var(--control-height-sm);
+  padding: var(--space-2) var(--space-4);
+  border: var(--border-width) solid var(--color-input-border);
+  border-radius: var(--radius-pills);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-body-sm);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+  transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
+}
+.chip-toggle:hover { background: var(--color-surface-raised); }
+.chip-toggle[aria-pressed="true"] {
+  border-color: var(--color-accent);
+  background: var(--color-surface-raised);
+  color: var(--color-accent-text);
+}
+.chip-toggle[aria-pressed="true"]::before { content: "✓ "; }
+.chip-toggle:focus-visible {
+  outline: var(--border-width-strong) solid var(--color-focus);
+  outline-offset: var(--border-width-strong);
+  box-shadow: 0 0 0 var(--focus-ring-width) var(--color-focus-ring);
+}
+.dialog .chips { margin: 0 0 var(--space-5); }
+
+/* The client's comments and check-in, shown on the workout card. */
+.feedback {
+  margin-top: var(--space-6);
+  padding: var(--space-4) var(--space-5);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-cards);
+  background: var(--color-surface);
+}
+.feedback .eyebrow { margin-bottom: var(--space-1); }
+.feedback .chips { margin: var(--space-2) 0; }
+.feedback p { margin: var(--space-2) 0 0; color: var(--color-text-body); }
+.feedback-comment { white-space: pre-wrap; font-style: normal; }
 .history-row {
   display: flex;
   flex-wrap: wrap;

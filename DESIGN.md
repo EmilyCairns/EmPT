@@ -155,6 +155,8 @@ The 64px, 80px and 88px sizes from the reference are for marketing heroes. If Em
 | **Logged sets** (`.ex-logged`) | "**Logged:** 65 kg × 8 @ 7 · …" in Charcoal 14px under the exercise. |
 | **Set row** (`.set-row`) | Logging grid: terracotta set number, then kg, reps and effort pill inputs, then a remove icon. The plan shows as grey placeholder text. |
 | **Rep max chips** (`.chip`) | Parchment pills with a Taupe outline: "5RM 85 kg". An estimate uses a **dashed** outline and Graphite text. |
+| **Option chips** (`.chip-toggle`) | Tap-to-select pills for multiple choice (the "How were you feeling?" check-in). Unselected: Parchment with an Ash outline. Selected: terracotta outline and Terracotta Text with a "✓". |
+| **Client feedback** (`.feedback`) | On a workout card: Parchment with a Taupe outline, a "Your notes" / "Amy's notes" eyebrow, the chosen options as chips, then their comment. Private to the client and trainer. |
 | **Mini labels** (`.mini-field`) | Eyebrow-sized Graphite capitals above compact inputs, so filled-in boxes still say what they are. |
 | **Draft workout card** (`.workout.draft`) | Trainer only. Parchment with a 1.5px **dashed** Taupe outline, a mono "Draft · not visible to …" badge, and **Publish** as its primary button in place of "Mark as done". Dashed outlines are reserved for drafts and estimates. |
 | **Eyebrow** (`h3`, `.eyebrow`) | All caps, Sans 600 12px, Terracotta Text, 8–12px above what it introduces. |

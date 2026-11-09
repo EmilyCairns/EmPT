@@ -57,6 +57,8 @@ const field = (label, input, hint) =>
   h('label', { class: 'field' }, h('span', { class: 'field-label' }, label), input, hint ? h('span', { class: 'muted small' }, hint) : null);
 
 function toast(message, isError = false) {
+  // One message at a time: a new one replaces any still showing.
+  document.querySelectorAll('.toast').forEach((old) => old.remove());
   const t = h('div', { class: 'toast' + (isError ? ' error' : ''), role: 'status' }, message);
   document.body.append(t);
   setTimeout(() => t.remove(), isError ? 6000 : 3500);
@@ -76,7 +78,7 @@ const clientName = (id) => state.clients.find((c) => c.id === id)?.full_name || 
 
 // altSubmitLabel adds a second, outlined submit button; onSubmit is then
 // called with 'alt' when that one was pressed and 'primary' otherwise.
-function openDialog({ title, fields, submitLabel = 'Save', altSubmitLabel, onSubmit, extra, wide }) {
+function openDialog({ title, fields, submitLabel = 'Save', altSubmitLabel, cancelLabel = 'Cancel', onSubmit, extra, wide }) {
   const dlg = h('dialog', { class: 'dialog' + (wide ? ' wide' : '') });
   const err = h('p', { class: 'error', role: 'alert' });
   const save = h('button', { type: 'submit', class: 'btn primary', 'data-action': 'primary' }, submitLabel);
@@ -106,7 +108,7 @@ function openDialog({ title, fields, submitLabel = 'Save', altSubmitLabel, onSub
     h('div', { class: 'dialog-actions' },
       extra || h('span'),
       h('div', { class: 'actions' },
-        h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+        h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, cancelLabel),
         alt,
         save)));
   dlg.append(form);
@@ -681,7 +683,7 @@ function openWorkoutEditor(client, workout, onSaved) {
 // Shared: workout card
 // ---------------------------------------------------------------------------
 
-function workoutCard(w, { actions = [], onChange, trainerFor, maxes = [], logs = [], onLog }) {
+function workoutCard(w, { actions = [], onChange, trainerFor, maxes = [], logs = [], feedback = null, onLog }) {
   const exercises = Array.isArray(w.exercises) ? w.exercises : [];
   const done = !!w.completed_at;
   const draft = !!w.is_draft;
@@ -698,9 +700,13 @@ function workoutCard(w, { actions = [], onChange, trainerFor, maxes = [], logs =
       toggle.disabled = false;
       if (error) return toast(error.message, true);
       if (!done) toast('Nice work! Workout marked as done.');
-      onChange();
+      // Clients get the optional "how were you feeling?" check-in.
+      if (!done && !trainerFor && feedback) {
+        openCheckinDialog(w, { clientId: w.client_id, existing: feedback.find((f) => f.workout_id === w.id), includeComment: true, onDone: onChange });
+      } else onChange();
     },
   }, done ? 'Mark as not done' : 'Mark as done');
+  const fb = feedback?.find((f) => f.workout_id === w.id);
 
   const publish = draft ? h('button', {
     class: 'btn primary',
@@ -737,6 +743,7 @@ function workoutCard(w, { actions = [], onChange, trainerFor, maxes = [], logs =
             howTo(e));
         }))
       : h('p', { class: 'muted small' }, 'No exercises listed.'),
+    fb ? feedbackBox(fb, who) : null,
     h('div', { class: 'row-end actions' }, draft ? publish : [logBtn, toggle]));
 }
 
@@ -838,15 +845,19 @@ function howTo(e) {
 }
 
 // Everything the workout cards need besides the workouts themselves.
+// feedback is null when the database doesn't have that table yet, which
+// hides the comments and check-in features.
 async function loadTrainingData(clientId) {
-  if (!state.lifting) return { maxes: [], logs: [] };
+  const fbRes = await sb.from('workout_feedback').select('*').eq('client_id', clientId);
+  const feedback = fbRes.error ? (isMissingTable(fbRes.error) ? null : (toast(fbRes.error.message, true), [])) : fbRes.data;
+  if (!state.lifting) return { maxes: [], logs: [], feedback };
   const [maxRes, logRes] = await Promise.all([
     sb.from('client_maxes').select('*').eq('client_id', clientId).order('tested_on', { ascending: false }),
     sb.from('set_logs').select('*').eq('client_id', clientId).order('created_at', { ascending: false }).limit(2000),
   ]);
   if (maxRes.error) toast(maxRes.error.message, true);
   if (logRes.error) toast(logRes.error.message, true);
-  return { maxes: maxRes.data || [], logs: logRes.data || [] };
+  return { maxes: maxRes.data || [], logs: logRes.data || [], feedback };
 }
 
 // Load maths. Weights are rounded to ROUND_TO_KG (set in config.js) so they
@@ -910,10 +921,13 @@ const SOURCE_LABEL = { trainer: `Set by ${TRAINER_NAME}`, client: 'Added by you'
 // Shared: logging a workout
 // ---------------------------------------------------------------------------
 
-function openLogDialog(w, { clientId, maxes, logs, asTrainer, onSaved }) {
+function openLogDialog(w, { clientId, maxes, logs, feedback = null, asTrainer, onSaved }) {
   const exercises = Array.isArray(w.exercises) ? w.exercises : [];
   const done = !!w.completed_at;
   const existing = logs.filter((l) => l.workout_id === w.id);
+  const askFeedback = !asTrainer && !!feedback;
+  const existingFb = feedback?.find((f) => f.workout_id === w.id);
+  const comment = askFeedback ? h('textarea', { rows: '3', maxlength: '4000', value: existingFb?.comment || '', placeholder: 'How did it go? Anything you want to tell me: what felt good, what felt hard, any pain…' }) : null;
 
   // The most recent other workout in which this exercise was logged.
   const previousFor = (e) => {
@@ -974,6 +988,7 @@ function openLogDialog(w, { clientId, maxes, logs, asTrainer, onSaved }) {
     fields: [
       h('p', { class: 'muted small' }, 'Enter what you actually lifted. Empty sets are skipped. Effort is how hard it felt out of 10 (10 = nothing left). Grey numbers are the plan.'),
       exercises.length ? blocks.map((b) => b.el) : h('p', { class: 'muted' }, 'This workout has no exercises to log.'),
+      comment ? h('div', { class: 'log-ex' }, field(`Comments for ${TRAINER_NAME} (optional)`, comment)) : null,
     ],
     onSubmit: async (action) => {
       const rowsToSave = [];
@@ -999,6 +1014,11 @@ function openLogDialog(w, { clientId, maxes, logs, asTrainer, onSaved }) {
         const { error: insError } = await sb.from('set_logs').insert(rowsToSave);
         if (insError) return insError.message;
       }
+      if (comment) {
+        const { error: fbError } = await sb.from('workout_feedback')
+          .upsert({ workout_id: w.id, client_id: clientId, comment: comment.value.trim() });
+        if (fbError) return fbError.message;
+      }
       const prs = await recordNewBests(rowsToSave, maxes, clientId);
       if (action === 'primary' && !done) {
         const { error: doneError } = await sb.rpc('set_workout_completed', { p_workout_id: w.id, p_done: true });
@@ -1007,7 +1027,10 @@ function openLogDialog(w, { clientId, maxes, logs, asTrainer, onSaved }) {
       toast(prs.length
         ? `New best! ${prs.map((p) => `${p.name} ${p.reps}RM ${kg(p.weight)}`).join(', ')}`
         : asTrainer ? 'Log saved.' : action === 'primary' && !done ? 'Nice work! Workout logged and marked as done.' : 'Log saved.');
-      onSaved();
+      if (askFeedback) {
+        // Opens once the log dialog has closed. Skipping still refreshes.
+        setTimeout(() => openCheckinDialog(w, { clientId, existing: existingFb, onDone: onSaved }), 0);
+      } else onSaved();
     },
   });
 }
@@ -1034,6 +1057,78 @@ async function recordNewBests(rows, maxes, clientId) {
   })));
   if (error) { toast(error.message, true); return []; }
   return [...best.values()];
+}
+
+// ---------------------------------------------------------------------------
+// Client: "how were you feeling?" check-in after a workout
+// ---------------------------------------------------------------------------
+
+// Keys are stored in the database; labels can be reworded freely.
+const FACTORS = [
+  ['period', 'On my period'],
+  ['night_shift', 'Night shift'],
+  ['poor_sleep', 'Poor sleep'],
+  ['tired', 'Tired'],
+  ['stressed', 'Stressed'],
+  ['unwell', 'Feeling unwell'],
+  ['sore', 'Still sore'],
+  ['niggle', 'Pain or niggle'],
+  ['under_fuelled', 'Not eaten enough'],
+  ['short_on_time', 'Short on time'],
+  ['felt_great', 'Felt great'],
+];
+const factorLabel = (key) => FACTORS.find(([k]) => k === key)?.[1] || key;
+
+function openCheckinDialog(w, { clientId, existing, includeComment = false, onDone }) {
+  const chosen = new Set(existing?.factors || []);
+  const chips = FACTORS.map(([key, label]) => {
+    const chip = h('button', {
+      type: 'button',
+      class: 'chip-toggle',
+      'aria-pressed': String(chosen.has(key)),
+      onclick: () => {
+        if (chosen.has(key)) chosen.delete(key); else chosen.add(key);
+        chip.setAttribute('aria-pressed', String(chosen.has(key)));
+      },
+    }, label);
+    return chip;
+  });
+  const note = h('input', { maxlength: '1000', value: existing?.factors_note || '', placeholder: 'e.g. Third night shift in a row' });
+  const comment = includeComment
+    ? h('textarea', { rows: '3', maxlength: '4000', value: existing?.comment || '', placeholder: 'How did it go? What felt good, what felt hard, any pain…' })
+    : null;
+
+  const dlg = openDialog({
+    title: 'How were you feeling?',
+    cancelLabel: 'Skip',
+    submitLabel: 'Save',
+    fields: [
+      h('p', { class: 'muted small' }, `Anything that might have affected today's session? Totally optional. It just helps ${TRAINER_NAME} plan your training. Only ${TRAINER_NAME} sees this.`),
+      h('div', { class: 'chips', role: 'group', 'aria-label': 'Things that affected this session' }, chips),
+      field('Anything else? (optional)', note),
+      comment ? field(`Comments for ${TRAINER_NAME} (optional)`, comment) : null,
+    ],
+    onSubmit: async () => {
+      const row = { workout_id: w.id, client_id: clientId, factors: [...chosen], factors_note: note.value.trim() };
+      if (comment) row.comment = comment.value.trim();
+      const { error } = await sb.from('workout_feedback').upsert(row);
+      if (error) return error.message;
+      toast(`Thanks! ${TRAINER_NAME} will see this.`);
+    },
+  });
+  // Runs whether they saved or skipped.
+  dlg.addEventListener('close', () => onDone?.());
+}
+
+// who = client's first name when the trainer is looking, null for the client.
+function feedbackBox(fb, who) {
+  const factors = fb.factors || [];
+  if (!factors.length && !fb.factors_note && !fb.comment) return null;
+  return h('div', { class: 'feedback' },
+    h('p', { class: 'eyebrow' }, who ? `${who}'s notes` : 'Your notes'),
+    factors.length ? h('div', { class: 'chips' }, factors.map((k) => h('span', { class: 'chip' }, factorLabel(k)))) : null,
+    fb.factors_note ? h('p', { class: 'small' }, fb.factors_note) : null,
+    fb.comment ? h('p', { class: 'feedback-comment' }, fb.comment) : null);
 }
 
 // ---------------------------------------------------------------------------

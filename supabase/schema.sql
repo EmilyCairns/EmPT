@@ -119,6 +119,21 @@ create table if not exists public.set_logs (
 create index if not exists set_logs_client_idx on public.set_logs (client_id, created_at);
 create index if not exists set_logs_workout_idx on public.set_logs (workout_id);
 
+-- The client's comments and "how were you feeling?" check-in for a
+-- workout. Only that client and the trainer can see it.
+-- factors holds short keys such as 'period', 'night_shift', 'tired'
+-- (the app turns them into labels).
+create table if not exists public.workout_feedback (
+  workout_id   uuid primary key references public.workouts (id) on delete cascade,
+  client_id    uuid not null references public.clients (id) on delete cascade,
+  comment      text not null default '' check (char_length(comment) <= 4000),
+  factors      text[] not null default '{}' check (coalesce(array_length(factors, 1), 0) <= 20),
+  factors_note text not null default '' check (char_length(factors_note) <= 1000),
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now()
+);
+create index if not exists workout_feedback_client_idx on public.workout_feedback (client_id);
+
 -- 2. Helper functions -------------------------------------------------
 
 -- Is the signed-in user the trainer?
@@ -179,6 +194,11 @@ create trigger exercises_touch_updated_at
   before update on public.exercises
   for each row execute function public.touch_updated_at();
 
+drop trigger if exists workout_feedback_touch_updated_at on public.workout_feedback;
+create trigger workout_feedback_touch_updated_at
+  before update on public.workout_feedback
+  for each row execute function public.touch_updated_at();
+
 drop trigger if exists client_notes_touch_updated_at on public.client_notes;
 create trigger client_notes_touch_updated_at
   before update on public.client_notes
@@ -214,6 +234,31 @@ alter table public.client_notes enable row level security;
 alter table public.exercises enable row level security;
 alter table public.client_maxes enable row level security;
 alter table public.set_logs enable row level security;
+alter table public.workout_feedback enable row level security;
+
+-- Workout feedback: the client writes their own (for their own published
+-- workouts); the trainer can read it all.
+drop policy if exists "workout_feedback: read own or trainer" on public.workout_feedback;
+create policy "workout_feedback: read own or trainer" on public.workout_feedback
+  for select to authenticated
+  using (public.is_trainer() or client_id = public.my_client_id());
+drop policy if exists "workout_feedback: client adds" on public.workout_feedback;
+create policy "workout_feedback: client adds" on public.workout_feedback
+  for insert to authenticated
+  with check (client_id = public.my_client_id() and exists (
+    select 1 from public.workouts w
+    where w.id = workout_id and w.client_id = public.my_client_id() and not w.is_draft));
+drop policy if exists "workout_feedback: client edits" on public.workout_feedback;
+create policy "workout_feedback: client edits" on public.workout_feedback
+  for update to authenticated
+  using (client_id = public.my_client_id())
+  with check (client_id = public.my_client_id() and exists (
+    select 1 from public.workouts w
+    where w.id = workout_id and w.client_id = public.my_client_id() and not w.is_draft));
+drop policy if exists "workout_feedback: remove" on public.workout_feedback;
+create policy "workout_feedback: remove" on public.workout_feedback
+  for delete to authenticated
+  using (public.is_trainer() or client_id = public.my_client_id());
 
 -- Exercise library: everyone signed in can read; only the trainer edits.
 drop policy if exists "exercises: read" on public.exercises;
@@ -303,10 +348,11 @@ create policy "messages: send as yourself" on public.messages
 
 -- 5. Permissions ------------------------------------------------------
 revoke all on public.trainers, public.clients, public.workouts, public.messages, public.client_notes,
-  public.exercises, public.client_maxes, public.set_logs from anon, authenticated;
+  public.exercises, public.client_maxes, public.set_logs, public.workout_feedback from anon, authenticated;
 grant select, insert, update, delete on public.clients, public.workouts, public.client_notes,
   public.exercises, public.client_maxes to authenticated;
 grant select, insert, delete on public.set_logs to authenticated;
+grant select, insert, update, delete on public.workout_feedback to authenticated;
 grant select, insert on public.messages to authenticated;
 
 revoke execute on function public.set_workout_completed(uuid, boolean) from public, anon;
