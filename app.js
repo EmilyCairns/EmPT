@@ -241,6 +241,7 @@ async function route(session) {
   if (meError) return renderError(meError);
   if (!me) return renderNotLinked();
   state.me = me;
+  state.tab = 'home';
   await Promise.all([loadLibrary(), loadNotices(), loadSessions(me.id)]);
   renderClientApp();
 }
@@ -810,17 +811,18 @@ function renderClientApp() {
   const body = h('div', { class: 'tab-body' });
   mount(header(), h('main', { class: 'client-main' },
     h('h1', {}, 'Hi ', h('em', {}, firstName(state.me.full_name))),
-    state.me.goals ? goalsBox('Your goals', state.me.goals) : null,
     tabs([
-      // Short labels so all four tabs fit on a phone.
+      // Short labels so all five tabs fit on a phone. Notices live on Home
+      // (with a "See all" link), so they don't need a tab of their own.
+      ['home', ['Home', unseenNotices() ? h('span', { class: 'dot', title: 'New post' }) : null]],
       ['workouts', 'Workouts'],
       state.sessions ? ['sessions', 'Sessions'] : null,
       state.lifting ? ['lifts', 'Lifts'] : null,
-      state.notices ? ['notices', ['Notices', unseenNotices() ? h('span', { class: 'dot', title: 'New post' }) : null]] : null,
       ['chat', 'Chat'],
     ].filter(Boolean), renderClientApp),
     body));
-  if (state.tab === 'workouts' || (state.tab === 'lifts' && !state.lifting) || (state.tab === 'notices' && !state.notices)
+  if (state.tab === 'home' || (state.tab === 'notices' && !state.notices)) renderClientHome(body);
+  else if (state.tab === 'workouts' || (state.tab === 'lifts' && !state.lifting)
     || (state.tab === 'sessions' && !state.sessions)) renderClientWorkouts(body);
   else if (state.tab === 'sessions') renderSessions(body, { client: state.me, asTrainer: false });
   else if (state.tab === 'lifts') renderLifts(body, state.me, { asTrainer: false });
@@ -838,18 +840,9 @@ async function renderClientWorkouts(body) {
   ]);
   if (!body.isConnected) return;
   if (error) { body.replaceChildren(h('p', { class: 'error' }, error.message)); return; }
-  // Pinned notice board posts sit at the top of the workouts page.
-  const pinned = (state.notices || []).filter((n) => n.pinned)
-    .map((n) => noticeCard(n, { isNew: isUnseen(n), compact: true }));
-  const next = (state.sessions || []).find((x) => x.status === 'booked' && new Date(x.starts_at) > new Date());
-  if (next) {
-    pinned.unshift(h('div', { class: 'callout' },
-      h('div', {}, h('p', { class: 'eyebrow' }, 'Next session'), h('p', {}, sessionLabel(next) + (next.location ? ` · ${next.location}` : ''))),
-      h('button', { class: 'btn small', onclick: () => { state.tab = 'sessions'; renderClientApp(); } }, 'View sessions')));
-  }
+  // (Pinned notices and the next session now live on the Home tab.)
   if (!data.length) {
-    fill(body, pinned.length ? h('div', { class: 'stack pinned-notices' }, pinned) : null,
-      h('div', { class: 'empty' }, h('p', { class: 'muted' }, `No workouts yet. ${TRAINER_NAME} will add them here.`)));
+    fill(body, h('div', { class: 'empty' }, h('p', { class: 'muted' }, `No workouts yet. ${TRAINER_NAME} will add them here.`)));
     return;
   }
   const now = today();
@@ -862,13 +855,203 @@ async function renderClientWorkouts(body) {
     onLog: state.lifting ? () => { state.activeWorkout = w.id; renderClientApp(); } : null,
   });
   fill(body,
-    pinned.length ? h('div', { class: 'stack pinned-notices' }, pinned) : null,
     h('h3', {}, 'Up next'),
     upcoming.length
       ? h('div', { class: 'stack' }, upcoming.map(card))
       : h('p', { class: 'muted' }, "You're all caught up."),
     past.length ? h('h3', {}, 'Past and completed') : null,
     past.length ? h('div', { class: 'stack' }, past.map(card)) : null);
+}
+
+// ---------------------------------------------------------------------------
+// Client: Home (today, this week, next session, notices, consistency)
+// ---------------------------------------------------------------------------
+
+const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+const dateOf = (key) => new Date(`${key}T12:00`);
+const shortDay = (key) => dateOf(key).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+// Monday of the week a date falls in, as 'YYYY-MM-DD'.
+function mondayKey(key) {
+  const d = dateOf(key);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return dayKey(d);
+}
+const addDays = (key, n) => { const d = dateOf(key); d.setDate(d.getDate() + n); return dayKey(d); };
+
+// "Back squat 4×8" style lines for a workout, the first few only.
+function exerciseLines(w, limit = 4) {
+  const list = Array.isArray(w.exercises) ? w.exercises : [];
+  const line = (e) => h('li', {}, h('span', {}, e.name), e.sets || e.reps ? h('b', {}, [e.sets, e.reps].filter(Boolean).join('×')) : null);
+  return h('ul', { class: 'ex-lines' },
+    (list.length > limit ? list.slice(0, limit - 1) : list).map(line),
+    list.length > limit ? h('li', { class: 'muted' }, `+${list.length - limit + 1} more`) : null);
+}
+
+async function renderClientHome(body) {
+  body.replaceChildren(h('p', { class: 'muted' }, 'Loading…'));
+  const [{ data, error }] = await Promise.all([
+    sb.from('workouts').select('id,title,workout_date,exercises,completed_at,created_at').eq('client_id', state.me.id).eq('is_draft', false),
+    state.notices ? loadNotices() : null,
+    state.sessions ? loadSessions(state.me.id) : null,
+  ]);
+  if (!body.isConnected) return;
+  if (error) { body.replaceChildren(h('p', { class: 'error' }, error.message)); return; }
+
+  const workouts = data;
+  const todayK = today();
+  const weekStart = mondayKey(todayK);
+  const open = (w) => { state.activeWorkout = w.id; renderClientApp(); };
+  const goTab = (tab) => { state.tab = tab; renderClientApp(); };
+  // A workout counts on the day it was planned for; undated ones on the day they were done.
+  const countedOn = (w) => w.workout_date || (w.completed_at ? dayKey(new Date(w.completed_at)) : null);
+  const plannedOn = (k) => workouts.filter((w) => w.workout_date === k);
+  const doneOn = (k) => workouts.filter((w) => w.completed_at && countedOn(w) === k);
+  const byDate = (a, b) => (a.workout_date || '9999').localeCompare(b.workout_date || '9999');
+  const upcoming = workouts.filter((w) => !w.completed_at && (!w.workout_date || w.workout_date > todayK)).sort(byDate);
+  const missedThisWeek = workouts.filter((w) => !w.completed_at && w.workout_date && w.workout_date < todayK && w.workout_date >= weekStart).sort(byDate);
+  const nextLine = (w) => (w ? `Next up: ${w.workout_date ? shortDay(w.workout_date) : 'any day'} · ${w.title}` : 'Nothing else planned yet.');
+
+  // ---- Today ----
+  const todays = plannedOn(todayK);
+  const todo = todays.find((w) => !w.completed_at);
+  const sessionToday = (state.sessions || []).find((x) => x.status === 'booked' && dayKey(new Date(x.starts_at)) === todayK && new Date(x.starts_at) > new Date());
+  const sessionLine = sessionToday
+    ? h('p', { class: 'today-session' }, `Session with ${TRAINER_NAME} at ${timeText(new Date(sessionToday.starts_at))}${sessionToday.location ? ` · ${sessionToday.location}` : ''}`)
+    : null;
+  let todayCard;
+  if (todo) {
+    todayCard = h('section', { class: 'card today-card' },
+      h('p', { class: 'eyebrow' }, `Today · ${shortDay(todayK)}`),
+      h('h2', {}, todo.title),
+      exerciseLines(todo),
+      todays.filter((w) => !w.completed_at).length > 1 ? h('p', { class: 'muted small' }, `+ ${todays.filter((w) => !w.completed_at).length - 1} more workout today`) : null,
+      sessionLine,
+      state.lifting ? h('button', { class: 'btn primary block', onclick: () => open(todo) }, 'Start workout →')
+        : h('button', { class: 'btn primary block', onclick: () => goTab('workouts') }, 'See workout →'));
+  } else if (todays.length) {
+    const doneW = todays[todays.length - 1];
+    todayCard = h('section', { class: 'card today-card done' },
+      h('p', { class: 'eyebrow' }, `Today · ${shortDay(todayK)}`),
+      h('h2', {}, doneW.title),
+      h('span', { class: 'badge' }, '✓ Done'),
+      h('p', { class: 'today-msg' }, 'Nice work. That one’s in the bank.'),
+      h('p', { class: 'muted small' }, nextLine(upcoming[0])),
+      sessionLine,
+      h('button', { class: 'btn block', onclick: () => (state.lifting ? open(doneW) : goTab('workouts')) }, 'View workout'));
+  } else if (workouts.length) {
+    const catchUp = missedThisWeek[0];
+    todayCard = h('section', { class: 'card today-card rest' },
+      h('p', { class: 'eyebrow' }, `Today · ${shortDay(todayK)}`),
+      h('h2', {}, sessionToday ? 'Session day' : 'Rest day'),
+      h('p', { class: 'today-msg' }, sessionToday ? 'No workout of your own today.' : 'Recover well: eat, sleep, move gently.'),
+      sessionLine,
+      catchUp
+        ? [h('p', { class: 'muted small' }, `Missed ${dateOf(catchUp.workout_date).toLocaleDateString(undefined, { weekday: 'long' })}'s ${catchUp.title}? Today's a good day to catch up.`),
+          h('button', { class: 'btn primary block', onclick: () => (state.lifting ? open(catchUp) : goTab('workouts')) }, 'Catch up →')]
+        : [h('p', { class: 'muted small' }, nextLine(upcoming[0])),
+          h('button', { class: 'btn block', onclick: () => goTab('workouts') }, 'See my workouts')]);
+  } else {
+    todayCard = h('section', { class: 'card today-card rest' },
+      h('p', { class: 'eyebrow' }, `Today · ${shortDay(todayK)}`),
+      h('h2', {}, 'Welcome'),
+      h('p', { class: 'today-msg' }, `Your first workout is on its way. ${TRAINER_NAME} will add it here.`),
+      sessionLine);
+  }
+
+  // ---- Weeks: planned vs done, for this week and the 11 before ----
+  const weeks = Array.from({ length: 12 }, (_, i) => {
+    const start = addDays(weekStart, -7 * (11 - i));
+    const keys = Array.from({ length: 7 }, (_, d) => addDays(start, d));
+    const planned = keys.reduce((n, k) => n + plannedOn(k).length, 0);
+    const done = keys.reduce((n, k) => n + doneOn(k).length, 0);
+    return { start, keys, planned, done, hit: planned > 0 && done >= planned };
+  });
+  const thisWeek = weeks[11];
+  // Streak: weeks in a row with every planned workout done. Weeks with nothing
+  // planned are skipped, so a holiday doesn't break it.
+  let streak = 0;
+  for (let i = 10; i >= 0; i--) {
+    if (weeks[i].planned === 0) continue;
+    if (weeks[i].hit) streak++; else break;
+  }
+  if (thisWeek.hit) streak++;
+  let best = 0;
+  let run = 0;
+  for (const w of weeks) {
+    if (w.planned === 0) continue;
+    run = w.hit ? run + 1 : 0;
+    best = Math.max(best, run);
+  }
+  const total12 = weeks.reduce((n, w) => n + w.done, 0);
+
+  // ---- This week card ----
+  const target = thisWeek.planned;
+  const left = Math.max(0, target - thisWeek.done);
+  let weekMsg;
+  if (!target) weekMsg = thisWeek.done ? `${thisWeek.done} done this week, with nothing else planned.` : 'Nothing planned this week yet.';
+  else if (!left) weekMsg = streak > 1 ? `Week done! That's ${streak} weeks in a row.` : 'Week done! Great work.';
+  else if (streak > 0) weekMsg = `${left} more to keep your ${streak}-week streak going.`;
+  else weekMsg = `${left} to go this week.`;
+  const R = 34;
+  const C = 2 * Math.PI * R;
+  const pct = target ? Math.min(1, thisWeek.done / target) : thisWeek.done ? 1 : 0;
+  const ring = svgEl('svg', { viewBox: '0 0 84 84', class: 'ring', role: 'img', 'aria-label': `${thisWeek.done} of ${target} planned workouts done this week` },
+    svgEl('circle', { cx: 42, cy: 42, r: R, class: 'ring-bg' }),
+    svgEl('circle', { cx: 42, cy: 42, r: R, class: 'ring-fg', 'stroke-dasharray': C.toFixed(2), 'stroke-dashoffset': (C * (1 - pct)).toFixed(2), transform: 'rotate(-90 42 42)' }),
+    svgEl('text', { x: 42, y: 41, 'text-anchor': 'middle', class: 'ring-n' }, target ? `${thisWeek.done}/${target}` : String(thisWeek.done)),
+    svgEl('text', { x: 42, y: 56, 'text-anchor': 'middle', class: 'ring-l' }, 'workouts'));
+  const dots = h('ol', { class: 'week-dots', 'aria-label': 'This week' }, thisWeek.keys.map((k, i) => {
+    const planned = plannedOn(k).length;
+    const done = doneOn(k).length;
+    const state_ = done ? 'done' : k === todayK ? 'today' : planned && k < todayK ? 'missed' : planned ? 'planned' : 'rest';
+    const label = { done: 'done', today: planned ? 'today, workout planned' : 'today', missed: 'missed', planned: 'workout planned', rest: 'no workout' }[state_];
+    return h('li', { class: `wd ${state_}`, 'aria-label': `${dateOf(k).toLocaleDateString(undefined, { weekday: 'long' })}: ${label}` },
+      h('i', { 'aria-hidden': 'true' }, state_ === 'done' ? '✓' : ''), h('span', { 'aria-hidden': 'true' }, DAY_LETTERS[i]));
+  }));
+  const weekCard = h('section', { class: 'card week-card' },
+    h('p', { class: 'eyebrow' }, 'This week'),
+    h('div', { class: 'week-top' }, ring, h('div', { class: 'week-side' }, h('p', { class: 'week-msg' }, weekMsg), dots)));
+
+  // ---- Next session (when it isn't today) ----
+  const nextSession = (state.sessions || []).find((x) => x.status === 'booked' && new Date(x.starts_at) > new Date() && x !== sessionToday);
+  const sessionCard_ = nextSession ? h('div', { class: 'callout' },
+    h('div', {}, h('p', { class: 'eyebrow' }, 'Next session'), h('p', {}, sessionLabel(nextSession) + (nextSession.location ? ` · ${nextSession.location}` : ''))),
+    h('button', { class: 'btn small', onclick: () => goTab('sessions') }, 'View sessions')) : null;
+
+  // ---- From the trainer: pinned first, newest next ----
+  const posts = (state.notices || []).slice(0, 2);
+  const noticesBlock = posts.length ? h('section', {},
+    h('div', { class: 'row-between' },
+      h('h3', {}, `From ${TRAINER_NAME}`),
+      h('button', { class: 'btn ghost small', onclick: () => goTab('notices') }, 'See all')),
+    h('div', { class: 'stack' }, posts.map((n) => noticeCard(n, { isNew: isUnseen(n), compact: true })))) : null;
+
+  // ---- Consistency ----
+  const maxBar = Math.max(1, ...weeks.map((w) => Math.max(w.done, w.planned)));
+  const consistency = workouts.length ? h('section', { class: 'card consistency' },
+    h('div', { class: 'row-between' }, h('p', { class: 'eyebrow' }, 'Consistency'), h('span', { class: 'muted small' }, 'Last 12 weeks')),
+    h('div', { class: 'stats' },
+      h('div', {}, h('b', {}, String(streak)), h('span', {}, `week${streak === 1 ? '' : 's'} in a row`)),
+      h('div', {}, h('b', {}, String(best)), h('span', {}, 'best streak')),
+      h('div', {}, h('b', {}, String(total12)), h('span', {}, 'workouts done'))),
+    h('div', { class: 'bars', role: 'img', 'aria-label': `Workouts done per week for the last 12 weeks: ${weeks.map((w) => w.done).join(', ')}` },
+      weeks.map((w, i) => h('div', { class: 'bar-col', title: `Week of ${shortDay(w.start)}: ${w.done} of ${w.planned} done` },
+        h('div', { class: 'bar-track' },
+          w.planned ? h('div', { class: 'bar-plan', style: null, 'data-h': w.planned }) : null,
+          h('div', { class: `bar ${w.hit ? 'hit' : w.done ? 'part' : ''}`, 'data-h': w.done })),
+        h('span', { 'aria-hidden': 'true' }, i === 11 ? 'Now' : '')))),
+    h('p', { class: 'muted small' }, 'Filled bars: every planned workout done that week. The outline shows what was planned.')) : null;
+
+  fill(body,
+    h('div', { class: 'stack home' },
+      state.me.goals ? goalsBox('Your goals', state.me.goals) : null,
+      todayCard,
+      workouts.length ? weekCard : null,
+      sessionCard_,
+      noticesBlock,
+      consistency));
+  // Bar heights as a share of the tallest week (set here, not inline in the markup).
+  for (const el of body.querySelectorAll('[data-h]')) el.style.height = `${(Number(el.dataset.h) / maxBar) * 100}%`;
 }
 
 // ---------------------------------------------------------------------------
@@ -1980,11 +2163,14 @@ async function renderClientNotices(body) {
   const posts = state.notices || [];
   const cards = posts.map((n) => noticeCard(n, { isNew: isUnseen(n) }));
   markNoticesSeen();
-  // Clear the dot on the tab now that they've been seen.
-  body.closest('main')?.querySelector('.tab.active .dot')?.remove();
-  fill(body, posts.length
-    ? h('div', { class: 'stack' }, cards)
-    : h('div', { class: 'empty' }, h('p', { class: 'muted' }, `Nothing here yet. Announcements from ${TRAINER_NAME} will appear here.`)));
+  // Clear the dot on the Home tab now that they've been seen.
+  body.closest('main')?.querySelector('.tab .dot')?.remove();
+  fill(body,
+    h('button', { class: 'btn ghost small back-link', onclick: () => { state.tab = 'home'; renderClientApp(); } }, '← Home'),
+    h('h3', {}, `From ${TRAINER_NAME}`),
+    posts.length
+      ? h('div', { class: 'stack' }, cards)
+      : h('div', { class: 'empty' }, h('p', { class: 'muted' }, `Nothing here yet. Announcements from ${TRAINER_NAME} will appear here.`)));
 }
 
 function audienceText(n) {
