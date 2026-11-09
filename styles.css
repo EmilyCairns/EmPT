@@ -482,6 +482,51 @@ input[type="checkbox"], input[type="radio"] {
 .notice.compact { padding: var(--space-6); }
 .pinned-notices { margin-bottom: var(--space-8); }
 .tab .dot { margin-left: var(--space-2); vertical-align: middle; }
+
+/* ---- Sessions and calendar -------------------------------------------- */
+
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
+.callout.warning { display: block; margin: 0 0 var(--space-5); border-color: var(--color-danger); color: var(--color-danger); font-weight: var(--weight-semibold); }
+.btn.small.danger { padding-inline: var(--space-4); }
+
+.session h4 { margin: 0; }
+.session .eyebrow { margin-bottom: var(--space-1); }
+.session .muted.small { margin: var(--space-1) 0 0; }
+.session.cancelled { background: var(--color-surface); border: var(--border-width) solid var(--color-border); }
+.session.cancelled h4 { color: var(--color-text-muted); text-decoration: line-through; }
+
+.cal-wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-6); align-items: start; }
+.calendar { padding: var(--space-4); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-cards); background: var(--color-surface); }
+.cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3); }
+.cal-head h4 { margin: 0; font-size: var(--text-subheading); }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--space-1); }
+.cal-weekday { padding-bottom: var(--space-1); color: var(--color-text-muted); font-size: var(--text-eyebrow); font-weight: var(--weight-semibold); text-align: center; text-transform: uppercase; }
+.cal-day {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-1);
+  min-height: var(--control-height);
+  padding: var(--space-1) 0;
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius-nav);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-body-sm);
+  cursor: pointer;
+}
+.cal-day:hover { background: var(--color-surface-raised); }
+.cal-day.other-month { color: var(--color-text-muted); }
+.cal-day.today .cal-num { font-weight: var(--weight-bold); text-decoration: underline; text-underline-offset: var(--space-1); }
+.cal-day.selected { border-color: var(--color-accent); background: var(--color-surface-raised); color: var(--color-accent-text); font-weight: var(--weight-semibold); }
+.cal-day:focus-visible { outline: var(--border-width-strong) solid var(--color-focus); outline-offset: var(--border-width-strong); }
+.cal-dots { display: flex; gap: var(--space-1); }
+.cal-dot { width: var(--space-2); height: var(--space-2); border-radius: var(--radius-pills); background: var(--color-accent); }
+.cal-dot.cancelled { background: transparent; border: var(--border-width) solid var(--color-text-muted); }
+.cal-day-list .eyebrow { margin-bottom: var(--space-3); }
 .history-row {
   display: flex;
   flex-wrap: wrap;
@@ -565,6 +610,11 @@ input[type="checkbox"], input[type="radio"] {
   .display { font-size: var(--text-heading); line-height: var(--leading-heading); }
   .ex-grid { grid-template-columns: repeat(2, 1fr); }
   .set-row { gap: var(--space-1); }
+  .cal-wrap { grid-template-columns: 1fr; }
+  .calendar { padding: var(--space-3); }
+  /* Five client tabs must fit on a phone. */
+  .tabs { gap: var(--space-4); }
+  .tab { font-size: var(--text-body-sm); }
   .hide-narrow { display: none; }
   .hint { display: none; }
   .row-between.top { flex-direction: column; }

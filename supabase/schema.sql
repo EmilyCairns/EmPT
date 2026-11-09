@@ -147,6 +147,26 @@ create table if not exists public.announcements (
 );
 create index if not exists announcements_created_idx on public.announcements (created_at desc);
 
+-- Booked training sessions. The trainer books, edits and deletes them;
+-- clients can see their own and cancel them (only through
+-- cancel_session(), below, which also notifies the other person in chat).
+create table if not exists public.sessions (
+  id            uuid primary key default gen_random_uuid(),
+  client_id     uuid not null references public.clients (id) on delete cascade,
+  starts_at     timestamptz not null,
+  duration_min  int not null default 60 check (duration_min between 5 and 600),
+  location      text not null default '' check (char_length(location) <= 200),
+  notes         text not null default '' check (char_length(notes) <= 2000),
+  status        text not null default 'booked' check (status in ('booked', 'cancelled')),
+  cancelled_at  timestamptz,
+  cancelled_by  text check (cancelled_by in ('client', 'trainer')),
+  cancel_reason text not null default '' check (char_length(cancel_reason) <= 500),
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+create index if not exists sessions_client_start_idx on public.sessions (client_id, starts_at);
+create index if not exists sessions_start_idx on public.sessions (starts_at);
+
 -- 2. Helper functions -------------------------------------------------
 
 -- Is the signed-in user the trainer?
@@ -186,6 +206,50 @@ begin
 end;
 $$;
 
+-- Cancels a session. Clients can cancel their own upcoming sessions; the
+-- trainer can cancel any. A chat message is posted so the other person is
+-- notified (it appears as a new message). p_label is the session's date and
+-- time as shown on the canceller's screen, so it reads in their time zone.
+create or replace function public.cancel_session(p_session_id uuid, p_reason text default '', p_label text default '')
+returns void
+language plpgsql security definer set search_path = ''
+as $$
+declare
+  s public.sessions;
+  by_trainer boolean := public.is_trainer();
+  reason text := left(btrim(coalesce(p_reason, '')), 500);
+  label text := left(btrim(coalesce(p_label, '')), 80);
+begin
+  select * into s from public.sessions where id = p_session_id for update;
+  if not found or (not by_trainer and s.client_id is distinct from public.my_client_id()) then
+    raise exception 'Session not found';
+  end if;
+  if s.status <> 'booked' then
+    raise exception 'This session is already cancelled';
+  end if;
+  if not by_trainer and s.starts_at < now() then
+    raise exception 'This session has already started, so it can''t be cancelled here. Send a message instead.';
+  end if;
+  if label = '' then
+    label := to_char(s.starts_at, 'YYYY-MM-DD HH24:MI UTC');
+  end if;
+
+  update public.sessions
+     set status = 'cancelled', cancelled_at = now(),
+         cancelled_by = case when by_trainer then 'trainer' else 'client' end,
+         cancel_reason = reason
+   where id = p_session_id;
+
+  insert into public.messages (client_id, sender, body)
+  values (
+    s.client_id,
+    case when by_trainer then 'trainer' else 'client' end,
+    case when by_trainer then 'Session cancelled: ' || label else 'I''ve cancelled my session on ' || label end
+      || case when reason <> '' then E'\nReason: ' || reason else '' end
+  );
+end;
+$$;
+
 -- Keep workouts.updated_at current.
 create or replace function public.touch_updated_at()
 returns trigger
@@ -215,6 +279,11 @@ create trigger workout_feedback_touch_updated_at
 drop trigger if exists announcements_touch_updated_at on public.announcements;
 create trigger announcements_touch_updated_at
   before update on public.announcements
+  for each row execute function public.touch_updated_at();
+
+drop trigger if exists sessions_touch_updated_at on public.sessions;
+create trigger sessions_touch_updated_at
+  before update on public.sessions
   for each row execute function public.touch_updated_at();
 
 drop trigger if exists client_notes_touch_updated_at on public.client_notes;
@@ -254,6 +323,18 @@ alter table public.client_maxes enable row level security;
 alter table public.set_logs enable row level security;
 alter table public.workout_feedback enable row level security;
 alter table public.announcements enable row level security;
+alter table public.sessions enable row level security;
+
+-- Sessions: clients see their own (and cancel through cancel_session());
+-- only the trainer books, edits and deletes.
+drop policy if exists "sessions: read own or trainer" on public.sessions;
+create policy "sessions: read own or trainer" on public.sessions
+  for select to authenticated
+  using (public.is_trainer() or client_id = public.my_client_id());
+drop policy if exists "sessions: trainer writes" on public.sessions;
+create policy "sessions: trainer writes" on public.sessions
+  for all to authenticated
+  using (public.is_trainer()) with check (public.is_trainer());
 
 -- Notice board: current clients read posts for everyone or addressed to
 -- them (removed clients see nothing); only the trainer writes.
@@ -378,16 +459,19 @@ create policy "messages: send as yourself" on public.messages
 
 -- 5. Permissions ------------------------------------------------------
 revoke all on public.trainers, public.clients, public.workouts, public.messages, public.client_notes,
-  public.exercises, public.client_maxes, public.set_logs, public.workout_feedback, public.announcements
-  from anon, authenticated;
+  public.exercises, public.client_maxes, public.set_logs, public.workout_feedback, public.announcements,
+  public.sessions from anon, authenticated;
 grant select, insert, update, delete on public.clients, public.workouts, public.client_notes,
   public.exercises, public.client_maxes to authenticated;
 grant select, insert, delete on public.set_logs to authenticated;
 grant select, insert, update, delete on public.workout_feedback to authenticated;
 grant select, insert, update, delete on public.announcements to authenticated;
+grant select, insert, update, delete on public.sessions to authenticated;
 grant select, insert on public.messages to authenticated;
 
 revoke execute on function public.set_workout_completed(uuid, boolean) from public, anon;
+revoke execute on function public.cancel_session(uuid, text, text) from public, anon;
+grant execute on function public.cancel_session(uuid, text, text) to authenticated;
 grant execute on function public.set_workout_completed(uuid, boolean) to authenticated;
 -- Signed-out visitors need no helper functions. The sign-up guard is a
 -- trigger function and is never called directly.

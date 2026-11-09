@@ -13,3 +13,7 @@ export const TRAINER_NAME = 'Emily';
 // so they can be loaded with real plates. 2.5 suits most gyms; use 1 or
 // 1.25 if you have small change plates.
 export const ROUND_TO_KG = 2.5;
+
+// Clients cancelling with less than this many hours' notice see a gentle
+// reminder that your cancellation policy may apply. (They can still cancel.)
+export const LATE_CANCEL_HOURS = 24;

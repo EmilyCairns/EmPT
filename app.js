@@ -2,8 +2,9 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 import * as config from './config.js';
 
 const { SUPABASE_URL, SUPABASE_ANON_KEY, APP_NAME, TRAINER_NAME } = config;
-// Optional setting: older config.js files may not have it.
+// Optional settings: older config.js files may not have them.
 const ROUND_TO_KG = Number(config.ROUND_TO_KG) > 0 ? Number(config.ROUND_TO_KG) : 2.5;
+const LATE_CANCEL_HOURS = Number(config.LATE_CANCEL_HOURS) >= 0 && config.LATE_CANCEL_HOURS != null ? Number(config.LATE_CANCEL_HOURS) : 24;
 
 // ---------------------------------------------------------------------------
 // Setup
@@ -19,10 +20,12 @@ const state = {
   me: null,            // client row when a client is signed in
   clients: [],         // trainer: all clients
   selectedId: null,    // trainer: client being viewed
-  view: 'client',      // trainer: 'client', 'library' or 'notices'
+  view: 'client',      // trainer: 'client', 'library', 'notices' or 'calendar'
   library: [],         // exercise library (both roles)
   lifting: true,       // false until the database has the lifting tables
   notices: null,       // notice board posts; null until/unless the table exists
+  sessions: null,      // booked sessions; null until/unless the table exists
+  cal: { month: null, day: null }, // calendar position (first of month, 'YYYY-MM-DD')
   tab: 'workouts',
   chatChannel: null,
   inboxChannel: null,
@@ -79,10 +82,10 @@ const clientName = (id) => state.clients.find((c) => c.id === id)?.full_name || 
 
 // altSubmitLabel adds a second, outlined submit button; onSubmit is then
 // called with 'alt' when that one was pressed and 'primary' otherwise.
-function openDialog({ title, fields, submitLabel = 'Save', altSubmitLabel, cancelLabel = 'Cancel', onSubmit, extra, wide }) {
+function openDialog({ title, fields, submitLabel = 'Save', altSubmitLabel, cancelLabel = 'Cancel', onSubmit, extra, wide, danger }) {
   const dlg = h('dialog', { class: 'dialog' + (wide ? ' wide' : '') });
   const err = h('p', { class: 'error', role: 'alert' });
-  const save = h('button', { type: 'submit', class: 'btn primary', 'data-action': 'primary' }, submitLabel);
+  const save = h('button', { type: 'submit', class: danger ? 'btn danger' : 'btn primary', 'data-action': 'primary' }, submitLabel);
   const alt = altSubmitLabel ? h('button', { type: 'submit', class: 'btn', 'data-action': 'alt' }, altSubmitLabel) : null;
   const form = h('form', {
     onsubmit: async (e) => {
@@ -232,7 +235,7 @@ async function route(session) {
   if (meError) return renderError(meError);
   if (!me) return renderNotLinked();
   state.me = me;
-  await Promise.all([loadLibrary(), loadNotices()]);
+  await Promise.all([loadLibrary(), loadNotices(), loadSessions(me.id)]);
   renderClientApp();
 }
 
@@ -247,15 +250,23 @@ async function loadClients() {
 }
 
 async function startTrainer() {
-  await Promise.all([loadClients(), loadLibrary(), loadNotices()]);
+  await Promise.all([loadClients(), loadLibrary(), loadNotices(), loadSessions()]);
   // Hear about new client messages anywhere in the app.
   state.inboxChannel = sb.channel(`inbox-${Date.now()}`)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, ({ new: m }) => {
       if (m.sender !== 'client') return;
+      // A client cancelling a session posts a chat message (see cancel_session).
+      const cancelled = m.body.startsWith("I've cancelled my session");
+      if (cancelled && state.sessions) {
+        loadSessions().then(() => {
+          renderClientList();
+          if (state.view === 'calendar' || (state.view === 'client' && state.tab === 'sessions')) renderPanel();
+        });
+      }
       if (state.selectedId === m.client_id && state.tab === 'chat') return;
       state.unread.add(m.client_id);
       renderClientList();
-      toast(`New message from ${clientName(m.client_id)}`);
+      toast(cancelled ? `${clientName(m.client_id)} cancelled a session. See their chat for details.` : `New message from ${clientName(m.client_id)}`);
     })
     .subscribe();
   renderTrainerApp();
@@ -285,6 +296,7 @@ function renderClientList() {
   }, h('span', { class: 'client-name' }, title), h('span', { class: 'muted small' }, detail));
   fill(ui.libNav,
     state.lifting ? navItem('library', 'Exercise library', `${state.library.length} exercise${state.library.length === 1 ? '' : 's'}`) : null,
+    state.sessions ? navItem('calendar', 'Calendar', upcomingLabel(state.sessions)) : null,
     state.notices ? navItem('notices', 'Notice board', `${state.notices.length} post${state.notices.length === 1 ? '' : 's'}`) : null);
   ui.libNav.hidden = !ui.libNav.children.length;
   if (!state.clients.length) {
@@ -349,6 +361,7 @@ function renderPanel() {
   flushPendingSaves();
   if (state.view === 'library') return renderLibraryPanel();
   if (state.view === 'notices') return renderNoticesPanel();
+  if (state.view === 'calendar') return renderCalendarPanel();
   const c = state.clients.find((x) => x.id === state.selectedId);
   if (!c) {
     ui.panel.replaceChildren(h('div', { class: 'empty' }, h('p', { class: 'muted' }, 'Choose a client to see their notes, workouts and chat.')));
@@ -356,6 +369,7 @@ function renderPanel() {
   }
   const hasAccount = !!c.email;
   const tabList = [['notes', 'Consult notes'], ['workouts', 'Workouts']];
+  if (state.sessions) tabList.splice(2, 0, ['sessions', 'Sessions']);
   if (state.lifting) tabList.push(['lifts', 'Lifts']);
   if (hasAccount) tabList.push(['chat', 'Chat']);
   if (!tabList.some(([key]) => key === state.tab)) state.tab = 'notes';
@@ -383,6 +397,7 @@ function renderPanel() {
   if (state.tab === 'notes') renderConsultNotes(body, c);
   else if (state.tab === 'workouts') renderTrainerWorkouts(body, c);
   else if (state.tab === 'lifts') renderLifts(body, c, { asTrainer: true });
+  else if (state.tab === 'sessions') renderSessions(body, { client: c, asTrainer: true });
   else renderChat(body, c.id, 'trainer');
 }
 
@@ -763,12 +778,15 @@ function renderClientApp() {
     tabs([
       // Short labels so all four tabs fit on a phone.
       ['workouts', 'Workouts'],
+      state.sessions ? ['sessions', 'Sessions'] : null,
       state.lifting ? ['lifts', 'Lifts'] : null,
       state.notices ? ['notices', ['Notices', unseenNotices() ? h('span', { class: 'dot', title: 'New post' }) : null]] : null,
       ['chat', 'Chat'],
     ].filter(Boolean), renderClientApp),
     body));
-  if (state.tab === 'workouts' || (state.tab === 'lifts' && !state.lifting) || (state.tab === 'notices' && !state.notices)) renderClientWorkouts(body);
+  if (state.tab === 'workouts' || (state.tab === 'lifts' && !state.lifting) || (state.tab === 'notices' && !state.notices)
+    || (state.tab === 'sessions' && !state.sessions)) renderClientWorkouts(body);
+  else if (state.tab === 'sessions') renderSessions(body, { client: state.me, asTrainer: false });
   else if (state.tab === 'lifts') renderLifts(body, state.me, { asTrainer: false });
   else if (state.tab === 'notices') renderClientNotices(body);
   else renderChat(body, state.me.id, 'client');
@@ -787,6 +805,12 @@ async function renderClientWorkouts(body) {
   // Pinned notice board posts sit at the top of the workouts page.
   const pinned = (state.notices || []).filter((n) => n.pinned)
     .map((n) => noticeCard(n, { isNew: isUnseen(n), compact: true }));
+  const next = (state.sessions || []).find((x) => x.status === 'booked' && new Date(x.starts_at) > new Date());
+  if (next) {
+    pinned.unshift(h('div', { class: 'callout' },
+      h('div', {}, h('p', { class: 'eyebrow' }, 'Next session'), h('p', {}, sessionLabel(next) + (next.location ? ` · ${next.location}` : ''))),
+      h('button', { class: 'btn small', onclick: () => { state.tab = 'sessions'; renderClientApp(); } }, 'View sessions')));
+  }
   if (!data.length) {
     fill(body, pinned.length ? h('div', { class: 'stack pinned-notices' }, pinned) : null,
       h('div', { class: 'empty' }, h('p', { class: 'muted' }, `No workouts yet. ${TRAINER_NAME} will add them here.`)));
@@ -1231,6 +1255,236 @@ function openMaxDialog(c, { asTrainer, onSaved }) {
       onSaved();
     },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Sessions and calendar
+// ---------------------------------------------------------------------------
+
+// Trainer: every session. Client: their own (the database filters them).
+async function loadSessions(clientId) {
+  let query = sb.from('sessions').select('*').order('starts_at');
+  if (clientId) query = query.eq('client_id', clientId);
+  const { data, error } = await query;
+  if (error) {
+    if (!isMissingTable(error)) toast(error.message, true);
+    state.sessions = null;
+    return;
+  }
+  state.sessions = data;
+}
+
+const dayKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const timeText = (d) => d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+// e.g. "Tue 3 Dec, 6:00 pm" in the viewer's own time zone.
+function sessionLabel(x) {
+  const d = new Date(x.starts_at);
+  return `${d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}, ${timeText(d)}`;
+}
+function upcomingLabel(sessions) {
+  const n = sessions.filter((x) => x.status === 'booked' && new Date(x.starts_at) > new Date()).length;
+  return n ? `${n} upcoming session${n === 1 ? '' : 's'}` : 'No upcoming sessions';
+}
+const hoursUntil = (x) => (new Date(x.starts_at) - new Date()) / 3600000;
+
+// A month grid (Monday first) with a dot for each session on a day.
+function calendarGrid(sessions, onChange) {
+  const now = new Date();
+  if (!state.cal.month) state.cal.month = new Date(now.getFullYear(), now.getMonth(), 1);
+  if (!state.cal.day) state.cal.day = dayKey(now);
+  const month = state.cal.month;
+  const first = new Date(month.getFullYear(), month.getMonth(), 1);
+  const start = new Date(first);
+  start.setDate(1 - ((first.getDay() + 6) % 7));
+  const days = Array.from({ length: 42 }, (_, i) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
+  if (days[35].getMonth() !== month.getMonth()) days.length = 35;
+  const byDay = new Map();
+  for (const x of sessions) {
+    const k = dayKey(new Date(x.starts_at));
+    if (!byDay.has(k)) byDay.set(k, []);
+    byDay.get(k).push(x);
+  }
+  const shift = (n) => { state.cal.month = new Date(month.getFullYear(), month.getMonth() + n, 1); onChange(); };
+  const weekdays = Array.from({ length: 7 }, (_, i) => new Date(2024, 0, 1 + i).toLocaleDateString(undefined, { weekday: 'short' }));
+  return h('div', { class: 'calendar' },
+    h('div', { class: 'cal-head' },
+      h('button', { type: 'button', class: 'btn icon', 'aria-label': 'Previous month', onclick: () => shift(-1) }, '‹'),
+      h('h4', {}, month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })),
+      h('button', { type: 'button', class: 'btn icon', 'aria-label': 'Next month', onclick: () => shift(1) }, '›')),
+    h('div', { class: 'cal-grid', role: 'grid' },
+      weekdays.map((w) => h('span', { class: 'cal-weekday', 'aria-hidden': 'true' }, w)),
+      days.map((d) => {
+        const k = dayKey(d);
+        const list = byDay.get(k) || [];
+        const booked = list.filter((x) => x.status === 'booked').length;
+        return h('button', {
+          type: 'button',
+          class: 'cal-day' + (d.getMonth() !== month.getMonth() ? ' other-month' : '') + (k === dayKey(now) ? ' today' : '') + (k === state.cal.day ? ' selected' : ''),
+          'aria-pressed': String(k === state.cal.day),
+          'aria-label': `${d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}${list.length ? `, ${booked} session${booked === 1 ? '' : 's'}${list.length > booked ? `, ${list.length - booked} cancelled` : ''}` : ''}`,
+          onclick: () => { state.cal.day = k; onChange(); },
+        },
+          h('span', { class: 'cal-num' }, String(d.getDate())),
+          list.length ? h('span', { class: 'cal-dots', 'aria-hidden': 'true' },
+            list.slice(0, 3).map((x) => h('span', { class: 'cal-dot' + (x.status === 'cancelled' ? ' cancelled' : '') }))) : null);
+      })));
+}
+
+// One session. who = client name (trainer view) or null (client view).
+function sessionCard(x, { who = null, actions = [] } = {}) {
+  const start = new Date(x.starts_at);
+  const end = new Date(start.getTime() + x.duration_min * 60000);
+  const cancelled = x.status === 'cancelled';
+  const byWhom = x.cancelled_by === 'trainer' ? (who ? 'you' : TRAINER_NAME) : (who ? firstName(who) : 'you');
+  return h('article', { class: 'card session' + (cancelled ? ' cancelled' : '') },
+    h('div', { class: 'row-between top' },
+      h('div', {},
+        h('p', { class: 'eyebrow' }, start.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })),
+        h('h4', {}, `${timeText(start)} – ${timeText(end)}`),
+        h('p', { class: 'muted small' }, [who, x.location, `${x.duration_min} min`].filter(Boolean).join(' · ')),
+        cancelled ? h('span', { class: 'badge' }, `Cancelled by ${byWhom}`) : null),
+      actions.length ? h('div', { class: 'actions' },
+        actions.map(([label, fn, cls = '']) => h('button', { class: `btn ${cls || 'ghost small'}`, onclick: fn }, label))) : null),
+    x.notes ? h('p', { class: 'notice-body' }, x.notes) : null,
+    cancelled && x.cancel_reason ? h('p', { class: 'muted small' }, `Reason: ${x.cancel_reason}`) : null);
+}
+
+function openCancelDialog(x, { asTrainer, onDone }) {
+  const reason = h('textarea', { rows: '3', maxlength: '500', placeholder: asTrainer ? 'Optional: the client sees this in chat' : `Optional: let ${TRAINER_NAME} know why` });
+  const late = !asTrainer && hoursUntil(x) < LATE_CANCEL_HOURS;
+  openDialog({
+    title: 'Cancel this session?',
+    submitLabel: 'Cancel session',
+    cancelLabel: 'Keep it',
+    danger: true,
+    fields: [
+      h('p', {}, h('strong', {}, sessionLabel(x)), x.location ? ` · ${x.location}` : ''),
+      late ? h('p', { class: 'callout warning' }, `This is less than ${LATE_CANCEL_HOURS} hours' notice. ${TRAINER_NAME}'s cancellation policy may still apply.`) : null,
+      field('Reason (optional)', reason),
+      h('p', { class: 'muted small' }, asTrainer ? 'A message about the cancellation is posted in your chat with the client.' : `${TRAINER_NAME} is notified straight away with a message in your chat.`),
+    ],
+    onSubmit: async () => {
+      const { error } = await sb.rpc('cancel_session', { p_session_id: x.id, p_reason: reason.value.trim(), p_label: sessionLabel(x) });
+      if (error) return error.message;
+      toast(asTrainer ? 'Session cancelled. The client has been sent a message.' : `Session cancelled. ${TRAINER_NAME} has been notified.`);
+      onDone();
+    },
+  });
+}
+
+const DURATIONS = [30, 45, 60, 75, 90, 120];
+
+// Book (x = null) or edit a session. client = fixed client, or null to choose one.
+function openSessionDialog(x, { client = null, onSaved }) {
+  const start = x ? new Date(x.starts_at) : null;
+  const who = client ? null : h('select', { required: true },
+    h('option', { value: '' }, 'Choose a client'),
+    state.clients.map((c) => h('option', { value: c.id, selected: x?.client_id === c.id || null }, c.full_name)));
+  const date = h('input', { type: 'date', required: true, value: start ? dayKey(start) : state.cal.day || today() });
+  const time = h('input', { type: 'time', required: true, step: '60', value: start ? `${String(start.getHours()).padStart(2, '0')}:${String(start.getMinutes()).padStart(2, '0')}` : '' });
+  const duration = h('select', {}, DURATIONS.map((m) => h('option', { value: String(m), selected: (x?.duration_min ?? 60) === m || null }, `${m} minutes`)));
+  const location = h('input', { maxlength: '200', value: x?.location || '', placeholder: 'e.g. Studio, Park, Online' });
+  const notes = h('textarea', { rows: '2', maxlength: '2000', value: x?.notes || '', placeholder: 'Optional: what to bring, focus of the session…' });
+  const repeat = x ? null : h('select', {}, [1, 2, 4, 6, 8, 12].map((n) => h('option', { value: String(n) }, n === 1 ? 'Just this once' : `Every week for ${n} weeks`)));
+  openDialog({
+    title: x ? 'Edit session' : client ? `Book a session for ${client.full_name}` : 'Book a session',
+    submitLabel: x ? 'Save' : 'Book',
+    fields: [
+      who ? field('Client', who) : null,
+      h('div', { class: 'two-col' }, field('Date', date), field('Start time', time)),
+      field('Length', duration),
+      field('Location', location),
+      field('Notes', notes),
+      repeat ? field('Repeat', repeat) : null,
+    ],
+    onSubmit: async () => {
+      const clientId = client?.id || who.value;
+      if (!clientId) return 'Choose a client.';
+      const first = new Date(`${date.value}T${time.value}`);
+      if (Number.isNaN(first.getTime())) return 'Check the date and time.';
+      const base = { client_id: clientId, duration_min: Number(duration.value), location: location.value.trim(), notes: notes.value.trim() };
+      if (x) {
+        const { error } = await sb.from('sessions').update({ ...base, starts_at: first.toISOString() }).eq('id', x.id);
+        if (error) return error.message;
+        toast('Session updated');
+      } else {
+        const weeks = Number(repeat.value);
+        const rows = Array.from({ length: weeks }, (_, i) => {
+          const d = new Date(first);
+          d.setDate(d.getDate() + 7 * i); // keeps the same local time across clock changes
+          return { ...base, starts_at: d.toISOString() };
+        });
+        const { error } = await sb.from('sessions').insert(rows);
+        if (error) return error.message;
+        toast(weeks === 1 ? 'Session booked' : `${weeks} weekly sessions booked`);
+      }
+      state.cal.day = date.value;
+      state.cal.month = new Date(first.getFullYear(), first.getMonth(), 1);
+      onSaved();
+    },
+  });
+}
+
+// Client view (asTrainer false), one client (trainer), or everyone (client null).
+async function renderSessions(body, { client, asTrainer }) {
+  const refresh = async () => {
+    await loadSessions(asTrainer ? undefined : client.id);
+    if (asTrainer) renderClientList();
+    if (body.isConnected) renderSessions(body, { client, asTrainer });
+  };
+  const all = state.sessions || [];
+  const mine = client ? all.filter((x) => x.client_id === client.id) : all;
+  const nameOf = (x) => (asTrainer && !client ? state.clients.find((c) => c.id === x.client_id)?.full_name || 'Client' : null);
+  const now = new Date();
+  const actionsFor = (x) => {
+    if (x.status !== 'booked') return asTrainer ? [['Delete', () => deleteSession(x, refresh), 'ghost small danger-text']] : [];
+    if (!asTrainer) return new Date(x.starts_at) > now ? [['Cancel session', () => openCancelDialog(x, { asTrainer: false, onDone: refresh }), 'small danger']] : [];
+    return [
+      ['Edit', () => openSessionDialog(x, { client, onSaved: refresh })],
+      ['Cancel', () => openCancelDialog(x, { asTrainer: true, onDone: refresh })],
+      ['Delete', () => deleteSession(x, refresh), 'ghost small danger-text'],
+    ];
+  };
+  const card = (x) => sessionCard(x, { who: asTrainer ? (nameOf(x) || client?.full_name) : null, actions: actionsFor(x) });
+
+  const upcoming = mine.filter((x) => x.status === 'booked' && new Date(x.starts_at) > now).slice(0, client ? 5 : 10);
+  const onDay = mine.filter((x) => dayKey(new Date(x.starts_at)) === (state.cal.day || dayKey(now)));
+  const rerender = () => renderSessions(body, { client, asTrainer });
+  const selectedLabel = new Date(`${state.cal.day || dayKey(now)}T12:00`).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+
+  fill(body,
+    h('div', { class: 'row-between' },
+      h('h3', {}, 'Upcoming'),
+      asTrainer ? h('button', { class: 'btn primary', onclick: () => openSessionDialog(null, { client, onSaved: refresh }) }, '+ Book session') : null),
+    upcoming.length
+      ? h('div', { class: 'stack' }, upcoming.map(card))
+      : h('p', { class: 'muted' }, asTrainer ? 'No upcoming sessions booked.' : `No upcoming sessions. ${TRAINER_NAME} will book them here.`),
+    h('h3', {}, 'Calendar'),
+    h('div', { class: 'cal-wrap' },
+      calendarGrid(mine, rerender),
+      h('div', { class: 'cal-day-list' },
+        h('p', { class: 'eyebrow' }, selectedLabel),
+        onDay.length ? h('div', { class: 'stack' }, onDay.map(card)) : h('p', { class: 'muted small' }, 'Nothing booked on this day.'))));
+}
+
+async function deleteSession(x, onDone) {
+  if (!confirm(`Delete the session on ${sessionLabel(x)}? This removes it completely (the client is not sent a message). To let them know, use Cancel instead.`)) return;
+  const { error } = await sb.from('sessions').delete().eq('id', x.id);
+  if (error) return toast(error.message, true);
+  toast('Session deleted');
+  onDone();
+}
+
+function renderCalendarPanel() {
+  const body = h('div', { class: 'tab-body' });
+  fill(ui.panel,
+    h('div', { class: 'panel-head' },
+      h('button', { class: 'btn ghost small back', onclick: () => { state.view = 'client'; renderClientList(); renderPanel(); } }, '← Clients'),
+      h('div', { class: 'panel-title' },
+        h('h2', {}, 'Calendar'),
+        h('p', { class: 'muted small' }, 'All booked sessions. Clients can cancel their own; you get a message in their chat when they do.'))),
+    body);
+  renderSessions(body, { client: null, asTrainer: true });
 }
 
 // ---------------------------------------------------------------------------
