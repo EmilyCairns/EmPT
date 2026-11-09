@@ -1254,32 +1254,51 @@ const svgEl = (tag, attrs = {}, ...kids) => {
   return el;
 };
 
-// Plate drawing sizes (SVG units): bigger plates are taller and thicker.
-const PLATE_SHAPE = { 25: [100, 14], 20: [96, 13], 15: [86, 12], 10: [74, 10], 5: [56, 8], 2.5: [44, 7], 1.25: [36, 6] };
+// Plate drawing sizes (SVG units): [height, thickness]. Bigger plates are
+// taller and thicker; every plate is wide enough to print its weight on.
+const PLATE_SHAPE = { 25: [116, 28], 20: [112, 26], 15: [100, 24], 10: [86, 22], 5: [66, 20], 2.5: [52, 19], 1.25: [44, 18] };
+// Dark plates get light writing, light plates get dark writing.
+const DARK_PLATES = new Set([25, 20, 15]);
 function barbellPicture(plates, bar) {
-  const W = 320, H = 110, mid = H / 2, collarL = 110, collarR = W - 110;
-  const shape = (p) => PLATE_SHAPE[p] || [40 + p * 2, 6];
-  const totalThick = plates.reduce((a, p) => a + shape(p)[1] + 1, 0);
-  const squeeze = Math.min(1, 92 / Math.max(totalThick, 1));
+  const W = 360, H = 128, mid = H / 2, collarL = 148, collarR = W - 148, sleeveEnd = 6;
+  const shape = (p) => PLATE_SHAPE[p] || [Math.min(116, 40 + p * 3), 20];
+  // Squeeze plates a little if lots are needed, but keep the numbers readable.
+  const room = collarL - 4 - sleeveEnd - 4;
+  const totalThick = plates.reduce((a, p) => a + shape(p)[1] + 2, 0);
+  const squeeze = Math.max(0.6, Math.min(1, room / Math.max(totalThick, 1)));
   const parts = [
-    svgEl('rect', { class: 'bar-shaft', x: collarL, y: mid - 3, width: collarR - collarL, height: 6, rx: 2 }),
-    svgEl('rect', { class: 'bar-sleeve', x: 8, y: mid - 5, width: collarL - 8, height: 10, rx: 2 }),
-    svgEl('rect', { class: 'bar-sleeve', x: collarR, y: mid - 5, width: W - 8 - collarR, height: 10, rx: 2 }),
-    svgEl('rect', { class: 'bar-collar', x: collarL - 4, y: mid - 9, width: 4, height: 18, rx: 1 }),
-    svgEl('rect', { class: 'bar-collar', x: collarR, y: mid - 9, width: 4, height: 18, rx: 1 }),
+    svgEl('rect', { class: 'bar-sleeve', x: sleeveEnd, y: mid - 6, width: collarL - sleeveEnd, height: 12, rx: 3 }),
+    svgEl('rect', { class: 'bar-sleeve', x: collarR, y: mid - 6, width: W - sleeveEnd - collarR, height: 12, rx: 3 }),
+    svgEl('rect', { class: 'bar-shaft', x: collarL, y: mid - 3.5, width: collarR - collarL, height: 7, rx: 2 }),
+    svgEl('rect', { class: 'bar-collar', x: collarL - 5, y: mid - 11, width: 5, height: 22, rx: 1.5 }),
+    svgEl('rect', { class: 'bar-collar', x: collarR, y: mid - 11, width: 5, height: 22, rx: 1.5 }),
+    svgEl('text', { class: 'bar-label', x: W / 2, y: mid - 12, 'text-anchor': 'middle' }, `${bar} kg bar`),
   ];
-  let left = collarL - 4;
-  let right = collarR + 4;
-  for (const p of plates) {
-    const [ph, pt] = shape(p);
-    const t = pt * squeeze;
+  const plate = (p, x, t) => {
+    const [ph] = shape(p);
     const cls = `plate plate-${String(p).replace('.', '-')}`;
-    left -= t + 1;
-    parts.push(svgEl('rect', { class: cls, x: left, y: mid - ph / 2, width: t, height: ph, rx: 2 }));
-    parts.push(svgEl('rect', { class: cls, x: right + 1, y: mid - ph / 2, width: t, height: ph, rx: 2 }));
-    right += t + 1;
+    const cx = x + t / 2;
+    return [
+      svgEl('rect', { class: cls, x, y: mid - ph / 2, width: t, height: ph, rx: 3 }),
+      // A thin rim, like the edge of a bumper plate.
+      svgEl('rect', { class: 'plate-rim', x: x + 2, y: mid - ph / 2 + 2, width: t - 4, height: ph - 4, rx: 2 }),
+      svgEl('text', {
+        class: `plate-label ${DARK_PLATES.has(p) ? 'on-dark' : 'on-light'}`,
+        x: cx, y: mid, 'text-anchor': 'middle', 'dominant-baseline': 'central',
+        transform: `rotate(-90 ${cx} ${mid})`,
+      }, String(p)),
+    ];
+  };
+  // Heaviest plates go on first, next to the collar.
+  let left = collarL - 5;
+  let right = collarR + 5;
+  for (const p of plates) {
+    const t = shape(p)[1] * squeeze;
+    left -= t + 2;
+    parts.push(...plate(p, left, t));
+    parts.push(...plate(p, right + 2, t));
+    right += t + 2;
   }
-  parts.push(svgEl('text', { class: 'bar-label', x: W / 2, y: mid - 10, 'text-anchor': 'middle' }, `${bar} kg bar`));
   return svgEl('svg', { viewBox: `0 0 ${W} ${H}`, class: 'barbell-svg', 'aria-hidden': 'true', focusable: 'false' }, parts);
 }
 

@@ -613,6 +613,16 @@ input[type="checkbox"], input[type="radio"] {
 .bar-collar { fill: var(--color-ink); }
 .bar-label { fill: var(--color-text-muted); font-family: var(--font-body); font-size: var(--text-mono); }
 .plate { stroke: var(--plate-outline); stroke-width: 1; }
+.plate-rim { fill: none; stroke: var(--plate-outline); stroke-width: 1; opacity: 0.35; }
+.plate-label {
+  font-family: var(--font-body);
+  font-size: var(--text-body-sm);
+  font-weight: var(--weight-bold);
+  letter-spacing: normal;
+  font-variant-numeric: tabular-nums;
+}
+.plate-label.on-dark { fill: var(--plate-label-on-dark); }
+.plate-label.on-light { fill: var(--plate-label-on-light); }
 .plate-25 { fill: var(--plate-25); }
 .plate-20 { fill: var(--plate-20); }
 .plate-15 { fill: var(--plate-15); }

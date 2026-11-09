@@ -62,11 +62,13 @@
   --plate-25: var(--color-ink);
   --plate-20: var(--color-charcoal);
   --plate-15: var(--color-graphite);
-  --plate-10: var(--color-ash);
-  --plate-5: var(--color-warm-taupe);
-  --plate-2-5: var(--color-aged-paper);
-  --plate-1-25: var(--color-parchment);
+  --plate-10: var(--color-warm-taupe);
+  --plate-5: var(--color-aged-paper);
+  --plate-2-5: var(--color-parchment);
+  --plate-1-25: var(--color-parchment);   /* Same as 2.5: told apart by size and the printed number */
   --plate-outline: var(--color-graphite);
+  --plate-label-on-dark: var(--color-parchment);  /* Weight printed on 25/20/15 kg plates */
+  --plate-label-on-light: var(--color-ink);       /* Weight printed on 10 kg and lighter */
   --bar-steel: var(--color-graphite);
   --bar-sleeve: var(--color-ash);
 
