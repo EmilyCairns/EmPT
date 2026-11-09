@@ -141,6 +141,21 @@ input:focus, textarea:focus, select:focus {
 }
 ::placeholder { color: var(--color-text-muted); opacity: 1; }
 
+/* Tick boxes and radio buttons keep their natural size, in the accent colour. */
+input[type="checkbox"], input[type="radio"] {
+  width: var(--space-5);
+  height: var(--space-5);
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  flex: none;
+  accent-color: var(--color-accent);
+  box-shadow: none;
+}
+.check { display: flex; align-items: center; gap: var(--space-3); min-height: var(--control-height-sm); cursor: pointer; }
+.check-list { display: flex; flex-direction: column; padding-left: var(--space-8); }
+.pin-option { margin-bottom: var(--space-5); }
+
 .field { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-5); }
 .field-label { font-size: var(--text-body-sm); font-weight: var(--weight-semibold); }
 
@@ -457,6 +472,16 @@ input:focus, textarea:focus, select:focus {
 .feedback .chips { margin: var(--space-2) 0; }
 .feedback p { margin: var(--space-2) 0 0; color: var(--color-text-body); }
 .feedback-comment { white-space: pre-wrap; font-style: normal; }
+
+/* ---- Notice board ----------------------------------------------------- */
+
+.notice h4 { margin: 0; }
+.notice .eyebrow { margin-bottom: var(--space-1); }
+.notice-body { margin: var(--space-4) 0 0; white-space: pre-wrap; color: var(--color-text-body); }
+.notice .muted.small { margin: var(--space-4) 0 0; }
+.notice.compact { padding: var(--space-6); }
+.pinned-notices { margin-bottom: var(--space-8); }
+.tab .dot { margin-left: var(--space-2); vertical-align: middle; }
 .history-row {
   display: flex;
   flex-wrap: wrap;

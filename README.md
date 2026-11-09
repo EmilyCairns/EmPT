@@ -62,10 +62,11 @@ Supabase's built-in email sender only allows a few sign-in emails per hour. That
 6. Choose a client and create workouts with **+ New workout**. Each workout has a title, a date, notes and a list of exercises (sets, reps, load, rest, coaching notes). **Save as draft** keeps it hidden from the client until you click **Publish** (or **Publish all drafts**). **Unpublish** hides it again. Use **Duplicate** to reuse a session. You can also ask Claude to write workouts for you: they arrive as drafts for you to check.
 7. **Exercise library** (top of the sidebar): add a demo video link and coaching cues to each exercise. Clients see them under "How to". Any new exercise name you type in a workout is added to the library automatically.
 8. **Percentages:** in the workout editor, fill in "% of max" and choose which rep max (for example 70% of 1RM). Each client sees their own weight worked out and rounded to 2.5 kg (change `ROUND_TO_KG` in `config.js`). If they only have, say, a 5RM, their 1RM is estimated from it.
-9. **Lifts tab:** record each client's 1RM, 3RM, 5RM and so on. Clients can add their own too, in **My lifts**.
+9. **Lifts tab:** record each client's 1RM, 3RM, 5RM and so on. Clients can add their own too, in their **Lifts** tab.
 10. **Logging:** clients tap **Log workout** to record weight, reps and effort for each set, with last time's numbers shown. You can also log for them (**Log** on a workout card), for example in a face-to-face session. A logged set that beats their current best is saved as a new rep max automatically.
-11. **Comments and check-in:** at the end of logging, clients can leave you a comment. Then a short, skippable "How were you feeling?" screen asks about things that may have affected the session (period, night shift, poor sleep, tired, stressed and so on). You see their answers on the workout card. Only you and that client can see them.
-12. The **Chat** tab is a private conversation with that client. A terracotta dot next to a client means they've sent a message you haven't opened yet.
+11. **Notice board** (top of the sidebar): post announcements such as closures, events, reminders and news, to all clients or to chosen ones. **Pin** important posts so they also show at the top of clients' workouts page. Clients see new posts in their **Notices** tab, with a dot until they've read them.
+12. **Comments and check-in:** at the end of logging, clients can leave you a comment. Then a short, skippable "How were you feeling?" screen asks about things that may have affected the session (period, night shift, poor sleep, tired, stressed and so on). You see their answers on the workout card. Only you and that client can see them.
+13. The **Chat** tab is a private conversation with that client. A terracotta dot next to a client means they've sent a message you haven't opened yet.
 
 Only emails you've added as clients can create an account. Anyone else is turned away.
 

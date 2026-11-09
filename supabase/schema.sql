@@ -134,6 +134,19 @@ create table if not exists public.workout_feedback (
 );
 create index if not exists workout_feedback_client_idx on public.workout_feedback (client_id);
 
+-- Notice board posts from the trainer. client_ids is null for "everyone",
+-- otherwise the post is only shown to the clients listed.
+create table if not exists public.announcements (
+  id         uuid primary key default gen_random_uuid(),
+  title      text not null check (char_length(title) between 1 and 120),
+  body       text not null default '' check (char_length(body) <= 5000),
+  pinned     boolean not null default false,
+  client_ids uuid[],
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists announcements_created_idx on public.announcements (created_at desc);
+
 -- 2. Helper functions -------------------------------------------------
 
 -- Is the signed-in user the trainer?
@@ -199,6 +212,11 @@ create trigger workout_feedback_touch_updated_at
   before update on public.workout_feedback
   for each row execute function public.touch_updated_at();
 
+drop trigger if exists announcements_touch_updated_at on public.announcements;
+create trigger announcements_touch_updated_at
+  before update on public.announcements
+  for each row execute function public.touch_updated_at();
+
 drop trigger if exists client_notes_touch_updated_at on public.client_notes;
 create trigger client_notes_touch_updated_at
   before update on public.client_notes
@@ -235,6 +253,18 @@ alter table public.exercises enable row level security;
 alter table public.client_maxes enable row level security;
 alter table public.set_logs enable row level security;
 alter table public.workout_feedback enable row level security;
+alter table public.announcements enable row level security;
+
+-- Notice board: current clients read posts for everyone or addressed to
+-- them (removed clients see nothing); only the trainer writes.
+drop policy if exists "announcements: read" on public.announcements;
+create policy "announcements: read" on public.announcements
+  for select to authenticated
+  using (public.is_trainer() or (public.my_client_id() is not null and (client_ids is null or public.my_client_id() = any (client_ids))));
+drop policy if exists "announcements: trainer writes" on public.announcements;
+create policy "announcements: trainer writes" on public.announcements
+  for all to authenticated
+  using (public.is_trainer()) with check (public.is_trainer());
 
 -- Workout feedback: the client writes their own (for their own published
 -- workouts); the trainer can read it all.
@@ -348,11 +378,13 @@ create policy "messages: send as yourself" on public.messages
 
 -- 5. Permissions ------------------------------------------------------
 revoke all on public.trainers, public.clients, public.workouts, public.messages, public.client_notes,
-  public.exercises, public.client_maxes, public.set_logs, public.workout_feedback from anon, authenticated;
+  public.exercises, public.client_maxes, public.set_logs, public.workout_feedback, public.announcements
+  from anon, authenticated;
 grant select, insert, update, delete on public.clients, public.workouts, public.client_notes,
   public.exercises, public.client_maxes to authenticated;
 grant select, insert, delete on public.set_logs to authenticated;
 grant select, insert, update, delete on public.workout_feedback to authenticated;
+grant select, insert, update, delete on public.announcements to authenticated;
 grant select, insert on public.messages to authenticated;
 
 revoke execute on function public.set_workout_completed(uuid, boolean) from public, anon;

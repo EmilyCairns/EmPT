@@ -157,6 +157,8 @@ The 64px, 80px and 88px sizes from the reference are for marketing heroes. If Em
 | **Rep max chips** (`.chip`) | Parchment pills with a Taupe outline: "5RM 85 kg". An estimate uses a **dashed** outline and Graphite text. |
 | **Option chips** (`.chip-toggle`) | Tap-to-select pills for multiple choice (the "How were you feeling?" check-in). Unselected: Parchment with an Ash outline. Selected: terracotta outline and Terracotta Text with a "✓". |
 | **Client feedback** (`.feedback`) | On a workout card: Parchment with a Taupe outline, a "Your notes" / "Amy's notes" eyebrow, the chosen options as chips, then their comment. Private to the client and trainer. |
+| **Notice** (`.notice`) | A notice board post: an Aged Paper card with an eyebrow ("Pinned · date"), a serif title, a mono "New" badge until the client has seen it, then the message. Pinned posts also sit above "Up next" on the client's workouts page. |
+| **Tick boxes and radios** (`.check`) | Native controls in the accent colour, 20px, with the label on the same line. |
 | **Mini labels** (`.mini-field`) | Eyebrow-sized Graphite capitals above compact inputs, so filled-in boxes still say what they are. |
 | **Draft workout card** (`.workout.draft`) | Trainer only. Parchment with a 1.5px **dashed** Taupe outline, a mono "Draft · not visible to …" badge, and **Publish** as its primary button in place of "Mark as done". Dashed outlines are reserved for drafts and estimates. |
 | **Eyebrow** (`h3`, `.eyebrow`) | All caps, Sans 600 12px, Terracotta Text, 8–12px above what it introduces. |

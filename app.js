@@ -19,9 +19,10 @@ const state = {
   me: null,            // client row when a client is signed in
   clients: [],         // trainer: all clients
   selectedId: null,    // trainer: client being viewed
-  view: 'client',      // trainer: 'client' or 'library'
+  view: 'client',      // trainer: 'client', 'library' or 'notices'
   library: [],         // exercise library (both roles)
   lifting: true,       // false until the database has the lifting tables
+  notices: null,       // notice board posts; null until/unless the table exists
   tab: 'workouts',
   chatChannel: null,
   inboxChannel: null,
@@ -231,7 +232,7 @@ async function route(session) {
   if (meError) return renderError(meError);
   if (!me) return renderNotLinked();
   state.me = me;
-  await loadLibrary();
+  await Promise.all([loadLibrary(), loadNotices()]);
   renderClientApp();
 }
 
@@ -246,7 +247,7 @@ async function loadClients() {
 }
 
 async function startTrainer() {
-  await Promise.all([loadClients(), loadLibrary()]);
+  await Promise.all([loadClients(), loadLibrary(), loadNotices()]);
   // Hear about new client messages anywhere in the app.
   state.inboxChannel = sb.channel(`inbox-${Date.now()}`)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, ({ new: m }) => {
@@ -277,14 +278,15 @@ function renderTrainerApp() {
 }
 
 function renderClientList() {
-  ui.layout.classList.toggle('has-selection', !!state.selectedId || state.view === 'library');
-  ui.libNav.hidden = !state.lifting;
-  ui.libNav.replaceChildren(h('button', {
-    class: 'client-item' + (state.view === 'library' ? ' active' : ''),
-    onclick: () => { flushPendingSaves(); state.view = 'library'; state.selectedId = null; renderClientList(); renderPanel(); },
-  },
-    h('span', { class: 'client-name' }, 'Exercise library'),
-    h('span', { class: 'muted small' }, `${state.library.length} exercise${state.library.length === 1 ? '' : 's'}`)));
+  ui.layout.classList.toggle('has-selection', !!state.selectedId || state.view !== 'client');
+  const navItem = (view, title, detail) => h('button', {
+    class: 'client-item' + (state.view === view ? ' active' : ''),
+    onclick: () => { flushPendingSaves(); state.view = view; state.selectedId = null; renderClientList(); renderPanel(); },
+  }, h('span', { class: 'client-name' }, title), h('span', { class: 'muted small' }, detail));
+  fill(ui.libNav,
+    state.lifting ? navItem('library', 'Exercise library', `${state.library.length} exercise${state.library.length === 1 ? '' : 's'}`) : null,
+    state.notices ? navItem('notices', 'Notice board', `${state.notices.length} post${state.notices.length === 1 ? '' : 's'}`) : null);
+  ui.libNav.hidden = !ui.libNav.children.length;
   if (!state.clients.length) {
     ui.list.replaceChildren(h('p', { class: 'muted pad' }, 'No clients yet. Tap "+ New client" to start their consult notes.'));
     return;
@@ -346,6 +348,7 @@ function renderPanel() {
   closeChat();
   flushPendingSaves();
   if (state.view === 'library') return renderLibraryPanel();
+  if (state.view === 'notices') return renderNoticesPanel();
   const c = state.clients.find((x) => x.id === state.selectedId);
   if (!c) {
     ui.panel.replaceChildren(h('div', { class: 'empty' }, h('p', { class: 'muted' }, 'Choose a client to see their notes, workouts and chat.')));
@@ -757,10 +760,17 @@ function renderClientApp() {
   mount(header(), h('main', { class: 'client-main' },
     h('h1', {}, 'Hi ', h('em', {}, firstName(state.me.full_name))),
     state.me.goals ? goalsBox('Your goals', state.me.goals) : null,
-    tabs([['workouts', 'My workouts'], state.lifting ? ['lifts', 'My lifts'] : null, ['chat', `Chat with ${TRAINER_NAME}`]].filter(Boolean), renderClientApp),
+    tabs([
+      // Short labels so all four tabs fit on a phone.
+      ['workouts', 'Workouts'],
+      state.lifting ? ['lifts', 'Lifts'] : null,
+      state.notices ? ['notices', ['Notices', unseenNotices() ? h('span', { class: 'dot', title: 'New post' }) : null]] : null,
+      ['chat', 'Chat'],
+    ].filter(Boolean), renderClientApp),
     body));
-  if (state.tab === 'workouts' || (state.tab === 'lifts' && !state.lifting)) renderClientWorkouts(body);
+  if (state.tab === 'workouts' || (state.tab === 'lifts' && !state.lifting) || (state.tab === 'notices' && !state.notices)) renderClientWorkouts(body);
   else if (state.tab === 'lifts') renderLifts(body, state.me, { asTrainer: false });
+  else if (state.tab === 'notices') renderClientNotices(body);
   else renderChat(body, state.me.id, 'client');
 }
 
@@ -774,8 +784,12 @@ async function renderClientWorkouts(body) {
   ]);
   if (!body.isConnected) return;
   if (error) { body.replaceChildren(h('p', { class: 'error' }, error.message)); return; }
+  // Pinned notice board posts sit at the top of the workouts page.
+  const pinned = (state.notices || []).filter((n) => n.pinned)
+    .map((n) => noticeCard(n, { isNew: isUnseen(n), compact: true }));
   if (!data.length) {
-    body.replaceChildren(h('div', { class: 'empty' }, h('p', { class: 'muted' }, `No workouts yet. ${TRAINER_NAME} will add them here.`)));
+    fill(body, pinned.length ? h('div', { class: 'stack pinned-notices' }, pinned) : null,
+      h('div', { class: 'empty' }, h('p', { class: 'muted' }, `No workouts yet. ${TRAINER_NAME} will add them here.`)));
     return;
   }
   const now = today();
@@ -788,6 +802,7 @@ async function renderClientWorkouts(body) {
     onLog: state.lifting ? () => openLogDialog(w, { clientId: state.me.id, ...ctx, asTrainer: false, onSaved: refresh }) : null,
   });
   fill(body,
+    pinned.length ? h('div', { class: 'stack pinned-notices' }, pinned) : null,
     h('h3', {}, 'Up next'),
     upcoming.length
       ? h('div', { class: 'stack' }, upcoming.map(card))
@@ -907,7 +922,7 @@ function prescription(e) {
 
 // who = client's first name when the trainer is looking, null for the client.
 function targetText(t, who) {
-  if (t.missing) return who ? `No ${t.rm}RM recorded for ${who} yet` : `Add your ${t.rm}RM in My lifts to see your weight`;
+  if (t.missing) return who ? `No ${t.rm}RM recorded for ${who} yet` : `Add your ${t.rm}RM in the Lifts tab to see your weight`;
   const basis = `${t.estimated ? 'estimated ' : ''}${t.rm}RM ${kg(Math.round(t.base * 10) / 10)}`;
   return `${who ? `${who}: ` : 'Your weight: '}${kg(t.kg)} (${t.pct}% of ${basis})`;
 }
@@ -1213,6 +1228,146 @@ function openMaxDialog(c, { asTrainer, onSaved }) {
       });
       if (error) return error.message;
       toast(`${lib.name} ${reps.value}RM saved.`);
+      onSaved();
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Notice board
+// ---------------------------------------------------------------------------
+
+// Pinned first, then newest. Clients only receive posts meant for them
+// (the database filters them).
+async function loadNotices() {
+  const { data, error } = await sb.from('announcements').select('*').order('created_at', { ascending: false });
+  if (error) {
+    if (!isMissingTable(error)) toast(error.message, true);
+    state.notices = null;
+    return;
+  }
+  state.notices = [...data].sort((a, b) => (b.pinned - a.pinned) || (b.created_at > a.created_at ? 1 : -1));
+}
+
+// "Seen" is remembered on the client's device; it only drives the new-post dot.
+const seenKey = () => `empt:notices-seen:${state.me?.id}`;
+function lastSeen() {
+  try { return localStorage.getItem(seenKey()) || ''; } catch { return ''; }
+}
+function markNoticesSeen() {
+  const newest = (state.notices || []).reduce((max, n) => (n.created_at > max ? n.created_at : max), '');
+  try { if (newest) localStorage.setItem(seenKey(), newest); } catch { /* private browsing: no dot memory */ }
+}
+const isUnseen = (n) => !!state.me && n.created_at > lastSeen();
+const unseenNotices = () => (state.notices || []).some(isUnseen);
+
+function noticeCard(n, { actions = [], isNew = false, audience = null, compact = false } = {}) {
+  return h('article', { class: 'card notice' + (n.pinned ? ' pinned' : '') + (compact ? ' compact' : '') },
+    h('div', { class: 'row-between top' },
+      h('div', {},
+        h('p', { class: 'eyebrow' }, [n.pinned ? 'Pinned' : null, formatDate(n.created_at.slice(0, 10))].filter(Boolean).join(' · ')),
+        h('h4', {}, n.title),
+        isNew ? h('span', { class: 'badge' }, 'New') : null),
+      actions.length ? h('div', { class: 'actions' },
+        actions.map(([label, fn]) => h('button', { class: 'btn ghost small' + (label === 'Delete' ? ' danger-text' : ''), onclick: fn }, label))) : null),
+    n.body ? h('p', { class: 'notice-body' }, n.body) : null,
+    audience ? h('p', { class: 'muted small' }, audience) : null);
+}
+
+async function renderClientNotices(body) {
+  body.replaceChildren(h('p', { class: 'muted' }, 'Loading…'));
+  await loadNotices();
+  if (!body.isConnected) return;
+  const posts = state.notices || [];
+  const cards = posts.map((n) => noticeCard(n, { isNew: isUnseen(n) }));
+  markNoticesSeen();
+  // Clear the dot on the tab now that they've been seen.
+  body.closest('main')?.querySelector('.tab.active .dot')?.remove();
+  fill(body, posts.length
+    ? h('div', { class: 'stack' }, cards)
+    : h('div', { class: 'empty' }, h('p', { class: 'muted' }, `Nothing here yet. Announcements from ${TRAINER_NAME} will appear here.`)));
+}
+
+function audienceText(n) {
+  if (!n.client_ids) return 'Everyone';
+  const names = n.client_ids.map((id) => state.clients.find((c) => c.id === id)?.full_name).filter(Boolean);
+  return names.length ? `Only: ${names.join(', ')}` : 'Only: (clients since removed)';
+}
+
+function renderNoticesPanel() {
+  const refresh = async () => { await loadNotices(); renderClientList(); if (state.view === 'notices') renderNoticesPanel(); };
+  const posts = state.notices || [];
+  fill(ui.panel,
+    h('div', { class: 'panel-head' },
+      h('button', { class: 'btn ghost small back', onclick: () => { state.view = 'client'; renderClientList(); renderPanel(); } }, '← Clients'),
+      h('div', { class: 'panel-title' },
+        h('h2', {}, 'Notice board'),
+        h('p', { class: 'muted small' }, 'Announcements for your clients: closures, events, reminders, news. Pinned posts also show at the top of their workouts page.')),
+      h('button', { class: 'btn primary small', onclick: () => openNoticeDialog(null, refresh) }, '+ New post')),
+    posts.length
+      ? h('div', { class: 'stack' }, posts.map((n) => noticeCard(n, {
+          audience: audienceText(n),
+          actions: [
+            ['Edit', () => openNoticeDialog(n, refresh)],
+            [n.pinned ? 'Unpin' : 'Pin', async () => {
+              const { error } = await sb.from('announcements').update({ pinned: !n.pinned }).eq('id', n.id);
+              if (error) return toast(error.message, true);
+              refresh();
+            }],
+            ['Delete', async () => {
+              if (!confirm(`Delete "${n.title}"? Clients will no longer see it.`)) return;
+              const { error } = await sb.from('announcements').delete().eq('id', n.id);
+              if (error) return toast(error.message, true);
+              toast('Post deleted');
+              refresh();
+            }],
+          ],
+        })))
+      : h('div', { class: 'empty' }, h('p', { class: 'muted' }, 'No posts yet. Use "+ New post" to send your first announcement.')));
+}
+
+function openNoticeDialog(n, onSaved) {
+  const title = h('input', { required: true, maxlength: '120', value: n?.title || '', placeholder: 'e.g. Studio closed on Bank Holiday Monday' });
+  const body = h('textarea', { rows: '5', maxlength: '5000', value: n?.body || '', placeholder: 'The details…' });
+  const pinned = h('input', { type: 'checkbox', checked: n?.pinned || null });
+  const chosen = new Set(n?.client_ids || []);
+  const everyone = h('input', { type: 'radio', name: 'audience', value: 'all', checked: !n?.client_ids || null });
+  const some = h('input', { type: 'radio', name: 'audience', value: 'some', checked: !!n?.client_ids || null });
+  const picks = h('div', { class: 'check-list' }, state.clients.map((c) =>
+    h('label', { class: 'check' },
+      h('input', { type: 'checkbox', checked: chosen.has(c.id) || null, onchange: (e) => { if (e.target.checked) chosen.add(c.id); else chosen.delete(c.id); } }),
+      h('span', {}, c.full_name, c.email ? null : h('span', { class: 'muted small' }, ' (no account yet)')))));
+  const syncPicks = () => { picks.hidden = !some.checked; };
+  everyone.addEventListener('change', syncPicks);
+  some.addEventListener('change', syncPicks);
+  syncPicks();
+
+  openDialog({
+    title: n ? 'Edit post' : 'New post',
+    submitLabel: n ? 'Save' : 'Post',
+    fields: [
+      field('Title', title),
+      field('Message', body),
+      h('div', { class: 'field' },
+        h('span', { class: 'field-label' }, 'Who sees it'),
+        h('label', { class: 'check' }, everyone, h('span', {}, 'All clients')),
+        h('label', { class: 'check' }, some, h('span', {}, 'Selected clients only')),
+        picks),
+      h('label', { class: 'check pin-option' }, pinned, h('span', {}, 'Pin to the top of their workouts page')),
+    ],
+    onSubmit: async () => {
+      if (some.checked && !chosen.size) return 'Choose at least one client, or pick "All clients".';
+      const row = {
+        title: title.value.trim(),
+        body: body.value.trim(),
+        pinned: pinned.checked,
+        client_ids: some.checked ? [...chosen] : null,
+      };
+      const { error } = n
+        ? await sb.from('announcements').update(row).eq('id', n.id)
+        : await sb.from('announcements').insert(row);
+      if (error) return error.message;
+      toast(n ? 'Post updated' : 'Posted. Your clients will see it next time they open the app.');
       onSaved();
     },
   });
