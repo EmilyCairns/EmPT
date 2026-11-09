@@ -613,6 +613,66 @@ input[type="checkbox"], input[type="radio"] {
 .bar { background: var(--color-border); }
 .bar.part { background: var(--color-input-border); }
 .bar.hit { background: var(--color-accent); }
+.bar-col.rest span { color: var(--color-accent-text); font-weight: var(--weight-semibold); }
+.bar-col.rest .bar-plan { border-color: var(--color-border); }
+
+/* Streak seals: terracotta wax stamps with a stitched inner ring. Earned
+   seals are kept for good; the next ones wait as dashed outlines. */
+.seals { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--space-2); margin: var(--space-5) 0 var(--space-2); padding: 0; list-style: none; }
+.seal { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); color: var(--color-text-muted); font-size: var(--text-mono); }
+.seal i, .week-seal, .big-seal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  border-radius: var(--radius-pills);
+  font-style: normal;
+  line-height: var(--leading-tight);
+  text-align: center;
+}
+.seal i { width: 100%; max-width: var(--space-12); border: var(--border-width-strong) dashed var(--color-input-border); }
+.seal b { font-family: var(--font-display); font-size: var(--text-subheading); font-weight: var(--weight-regular); }
+.seal.earned { color: var(--color-accent-text); font-weight: var(--weight-semibold); }
+.seal.earned i, .week-seal, .big-seal {
+  border: 0;
+  outline: var(--border-width) dashed var(--color-on-accent);
+  outline-offset: calc(-1 * var(--space-1));
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  transform: rotate(var(--seal-tilt));
+}
+.seal.earned b { font-weight: var(--weight-regular); }
+/* This week, once every workout is done: a seal pressed onto the card's corner. */
+.week-card { position: relative; }
+.week-seal { position: absolute; top: calc(-1 * var(--space-3)); right: var(--space-4); width: var(--space-16); }
+.week-seal b { font-family: var(--font-display); font-size: var(--text-title); font-weight: var(--weight-regular); }
+.week-seal span { font-size: var(--text-mono); }
+
+/* "Week sealed!" moment: the seal stamps down onto the page. */
+.dialog.celebrate { text-align: center; }
+.dialog.celebrate h2 { margin: var(--space-6) 0 var(--space-2); font-size: var(--text-heading); }
+.dialog.celebrate p { margin: 0 0 var(--space-4); }
+.dialog.celebrate .seal-earned { color: var(--color-accent-text); font-weight: var(--weight-semibold); }
+.big-seal { width: calc(var(--space-20) + var(--space-12)); margin: var(--space-2) auto 0; outline-width: var(--border-width-strong); outline-offset: calc(-1 * var(--space-2)); animation: stamp var(--motion-stamp) both; }
+.big-seal b { font-family: var(--font-display); font-size: var(--text-heading-lg); font-weight: var(--weight-regular); }
+.big-seal span { margin-top: var(--space-1); font-size: var(--text-eyebrow); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-body); }
+@keyframes stamp {
+  from { opacity: 0; transform: scale(2.4) rotate(calc(var(--seal-tilt) * 4)); }
+  to { opacity: 1; transform: scale(1) rotate(var(--seal-tilt)); }
+}
+
+/* Trainer: a client's streak, high five and rest weeks. */
+.streak-card .row-between .eyebrow { margin: 0; }
+.streak-line { margin: var(--space-2) 0 0; font-size: var(--text-body-lg); }
+.streak-line b { font-family: var(--font-display); font-size: var(--text-heading); font-weight: var(--weight-regular); }
+.rest-weeks { margin-top: var(--space-4); }
+.rest-weeks summary { cursor: pointer; width: fit-content; font-weight: var(--weight-semibold); text-decoration: underline; text-underline-offset: var(--space-1); }
+.rest-list { margin: var(--space-2) 0 0; padding: 0; list-style: none; }
+.rest-list li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) 0; border-bottom: var(--border-width) solid var(--color-border); }
+.rest-list li:last-child { border-bottom: 0; }
+.rest-list li > span { display: flex; flex-direction: column; }
+.rest-list li.is-rest b { color: var(--color-accent-text); }
 
 /* ---- Programs --------------------------------------------------------- */
 

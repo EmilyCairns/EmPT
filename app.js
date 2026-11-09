@@ -565,15 +565,83 @@ async function renderConsultNotes(body, c) {
       field('Goals', goals))));
 }
 
+// The trainer's view of a client's streak: seals, a high five, and rest weeks.
+function trainerStreakCard(c, workouts, excused, refresh) {
+  const stats = streakStats(workouts, excused);
+  const name = firstName(c.full_name);
+  const highFive = c.email ? h('button', { class: 'btn small', onclick: () => openHighFive(c, stats) }, 'Send a high five') : null;
+  let restWeeks = null;
+  if (excused) {
+    // This week, the 7 before (to forgive a past week) and 4 ahead (to plan a holiday).
+    const starts = Array.from({ length: 12 }, (_, i) => addDays(stats.weekStart, 7 * (4 - i)));
+    const byStart = new Map(stats.weeks.map((w) => [w.start, w]));
+    restWeeks = h('details', { class: 'rest-weeks' },
+      h('summary', {}, `Rest weeks${excused.size ? ` (${excused.size})` : ''}`),
+      h('p', { class: 'muted small' }, `Holiday, illness or a deload? A rest week pauses ${name}'s streak instead of breaking it. ${name} sees it marked "Rest".`),
+      h('ul', { class: 'rest-list' }, starts.map((start) => {
+        const w = byStart.get(start);
+        const isRest = excused.has(start);
+        const when = start > stats.weekStart ? 'Coming up' : start === stats.weekStart ? 'This week' : w?.planned ? `${w.done} of ${w.planned} done` : 'Nothing planned';
+        return h('li', { class: isRest ? 'is-rest' : null },
+          h('span', {}, h('b', {}, `Week of ${shortDay(start)}`), h('span', { class: 'muted small' }, isRest ? `${when} · rest week` : when)),
+          h('button', {
+            class: 'btn ghost small',
+            onclick: async () => {
+              const q = sb.from('excused_weeks');
+              const { error } = isRest
+                ? await q.delete().eq('client_id', c.id).eq('week_start', start)
+                : await q.insert({ client_id: c.id, week_start: start });
+              if (error) return toast(error.message, true);
+              toast(isRest ? 'Rest week removed.' : `Rest week added. ${name}'s streak is safe.`);
+              refresh();
+            },
+          }, isRest ? 'Undo' : 'Make rest week'));
+      })));
+  }
+  return h('section', { class: 'card streak-card' },
+    h('div', { class: 'row-between' }, h('p', { class: 'eyebrow' }, 'Streak'), highFive),
+    h('p', { class: 'streak-line' }, h('b', {}, String(stats.streak)), ` ${stats.streak === 1 ? 'week' : 'weeks'} in a row · best ${stats.best}`),
+    stats.justSealed ? h('p', { class: 'badge' }, `Just earned the ${stats.streak}-week seal`) : null,
+    sealRow(stats),
+    h('p', { class: 'muted small' }, nextSealText(stats).replace('your', 'the')),
+    restWeeks);
+}
+
+// A quick message of encouragement, sent into the client's chat.
+function openHighFive(c, stats) {
+  const name = firstName(c.full_name);
+  const text = stats.justSealed
+    ? `High five, ${name}! ${stats.streak} weeks in a row and your ${stats.streak}-week seal is earned. So proud of you.`
+    : stats.streak > 1
+      ? `High five, ${name}! ${stats.streak} weeks in a row. Keep it going!`
+      : `High five, ${name}! Great work this week.`;
+  const message = h('textarea', { rows: '3', maxlength: '4000', required: true }, text);
+  openDialog({
+    title: `High five for ${name}`,
+    fields: field('Message', message, 'Sent in your chat with them. Change it however you like.'),
+    submitLabel: 'Send',
+    onSubmit: async () => {
+      const body = message.value.trim();
+      if (!body) return 'Write a message first.';
+      const { error } = await sb.from('messages').insert({ client_id: c.id, sender: 'trainer', body: `🙌 ${body}` });
+      if (error) return error.message;
+      toast(`High five sent to ${name}.`);
+      return null;
+    },
+  });
+}
+
 async function renderTrainerWorkouts(body, c) {
   const list = h('div', { class: 'stack' }, h('p', { class: 'muted' }, 'Loading…'));
   const refresh = () => renderTrainerWorkouts(body, c);
   const reminder = h('div');
   const publishAll = h('span');
   const programsEl = h('div');
+  const streakEl = h('div');
   const newProgram = h('button', { class: 'btn', hidden: true, onclick: () => openProgramDialog(c, null, refresh) }, '+ New program');
   body.replaceChildren(
     reminder,
+    streakEl,
     programsEl,
     h('div', { class: 'row-between' },
       h('h3', {}, 'Workouts'),
@@ -595,14 +663,17 @@ async function renderTrainerWorkouts(body, c) {
     if (data?.injuries?.trim() && reminder.isConnected) reminder.replaceWith(goalsBox('Injuries and conditions · private', data.injuries.trim()));
   });
 
-  const [{ data, error }, ctx] = await Promise.all([
+  const [{ data, error }, ctx, excused] = await Promise.all([
     sb.from('workouts').select('*').eq('client_id', c.id)
       .order('workout_date', { ascending: false, nullsFirst: true })
       .order('created_at', { ascending: false }),
     loadTrainingData(c.id),
+    loadExcused(c.id),
   ]);
   if (!list.isConnected) return;
   if (error) { list.replaceChildren(h('p', { class: 'error' }, error.message)); return; }
+  const published = data.filter((w) => !w.is_draft);
+  if (published.length) streakEl.replaceWith(trainerStreakCard(c, published, excused, refresh));
   if (!data.length) {
     list.replaceChildren(h('p', { class: 'muted' }, `No workouts yet. Create ${firstName(c.full_name)}'s first one.`));
     return;
@@ -1001,6 +1072,95 @@ function mondayKey(key) {
 }
 const addDays = (key, n) => { const d = dateOf(key); d.setDate(d.getDate() + n); return dayKey(d); };
 
+// ---- Streaks ----
+// A week counts when every planned workout in it is done. Weeks with nothing
+// planned, and rest weeks the trainer has marked, pause the streak instead of
+// breaking it. Seals are earned from the best streak ever, so they're kept
+// even after a streak ends.
+const STREAK_SEALS = [2, 4, 8, 12, 26, 52];
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+// Rest weeks for a client as a Set of Monday keys, or null when the database
+// doesn't have them yet.
+async function loadExcused(clientId) {
+  const { data, error } = await sb.from('excused_weeks').select('week_start').eq('client_id', clientId);
+  if (error) {
+    if (!isMissingTable(error)) toast(error.message, true);
+    return null;
+  }
+  return new Set(data.map((r) => r.week_start));
+}
+
+// workouts: published workouts only.
+function streakStats(workouts, excused, todayK = today()) {
+  const weekStart = mondayKey(todayK);
+  const countedOn = (w) => w.workout_date || (w.completed_at ? dayKey(new Date(w.completed_at)) : null);
+  const planned = new Map();
+  const done = new Map();
+  const bump = (map, k) => map.set(k, (map.get(k) || 0) + 1);
+  let first = addDays(weekStart, -7 * 11);
+  for (const w of workouts) {
+    if (w.workout_date) bump(planned, mondayKey(w.workout_date));
+    const k = w.completed_at && countedOn(w);
+    if (k) bump(done, mondayKey(k));
+    for (const d of [w.workout_date, k]) if (d && mondayKey(d) < first) first = mondayKey(d);
+  }
+  const weeks = [];
+  for (let start = first; start <= weekStart; start = addDays(start, 7)) {
+    const p = planned.get(start) || 0;
+    const d = done.get(start) || 0;
+    weeks.push({ start, keys: Array.from({ length: 7 }, (_, i) => addDays(start, i)), planned: p, done: d, hit: p > 0 && d >= p, excused: !!excused?.has(start) });
+  }
+  const thisWeek = weeks[weeks.length - 1];
+  // A paused week neither adds to nor breaks the streak.
+  const paused = (w) => !w.hit && (w.planned === 0 || w.excused);
+  let streak = 0;
+  for (let i = weeks.length - 2; i >= 0; i--) {
+    if (paused(weeks[i])) continue;
+    if (weeks[i].hit) streak++; else break;
+  }
+  if (thisWeek.hit) streak++;
+  let best = 0;
+  let run = 0;
+  for (const w of weeks) {
+    if (paused(w)) continue;
+    run = w.hit ? run + 1 : 0;
+    best = Math.max(best, run);
+  }
+  const nextSeal = STREAK_SEALS.find((m) => m > best) || null;
+  return { weeks, thisWeek, weekStart, streak, best, nextSeal, justSealed: thisWeek.hit && STREAK_SEALS.includes(streak) && streak === best };
+}
+
+// The row of milestone seals: earned ones stamped in terracotta, the rest outlined.
+function sealRow(stats) {
+  return h('ol', { class: 'seals', 'aria-label': 'Streak seals' }, STREAK_SEALS.map((m) => {
+    const earned = stats.best >= m;
+    return h('li', { class: 'seal' + (earned ? ' earned' : ''), 'aria-label': `${m}-week seal: ${earned ? 'earned' : 'not yet'}` },
+      h('i', { 'aria-hidden': 'true' }, h('b', {}, String(m))), h('span', { 'aria-hidden': 'true' }, 'weeks'));
+  }));
+}
+const nextSealText = (stats) => (stats.nextSeal
+  ? `${plural(stats.nextSeal - stats.streak, 'more week')} to your ${stats.nextSeal}-week seal.`
+  : 'Every seal earned. Incredible.');
+
+// A wax seal stamps onto the screen the first time a week is completed.
+function celebrateWeek(stats) {
+  const key = `empt-sealed:${state.me.id}:${stats.weekStart}`;
+  try {
+    if (localStorage.getItem(key)) return;
+    localStorage.setItem(key, '1');
+  } catch { /* storage blocked: celebrate anyway */ }
+  const dlg = h('dialog', { class: 'dialog celebrate', 'aria-labelledby': 'celebrate-title' },
+    h('div', { class: 'big-seal', 'aria-hidden': 'true' }, h('b', {}, String(stats.streak)), h('span', {}, stats.streak === 1 ? 'week' : 'weeks')),
+    h('h2', { id: 'celebrate-title' }, 'Week sealed!'),
+    h('p', {}, stats.streak > 1 ? `That's ${stats.streak} weeks in a row. Every workout done.` : 'Every workout done this week. That’s the start of a streak.'),
+    stats.justSealed ? h('p', { class: 'seal-earned' }, `You’ve earned your ${stats.streak}-week seal.`) : null,
+    h('form', { method: 'dialog' }, h('button', { class: 'btn primary block' }, 'Keep it going')));
+  dlg.addEventListener('close', () => dlg.remove());
+  document.body.append(dlg);
+  dlg.showModal();
+}
+
 // "Back squat 4×8" style lines for a workout, the first few only.
 function exerciseLines(w, limit = 4) {
   const list = Array.isArray(w.exercises) ? w.exercises : [];
@@ -1012,8 +1172,9 @@ function exerciseLines(w, limit = 4) {
 
 async function renderClientHome(body) {
   body.replaceChildren(h('p', { class: 'muted' }, 'Loading…'));
-  const [{ data, error }] = await Promise.all([
+  const [{ data, error }, excused] = await Promise.all([
     sb.from('workouts').select('id,title,workout_date,exercises,completed_at,created_at').eq('client_id', state.me.id).eq('is_draft', false),
+    loadExcused(state.me.id),
     state.notices ? loadNotices() : null,
     state.sessions ? loadSessions(state.me.id) : null,
     state.myPrograms ? loadPrograms(state.me.id).then((p) => { state.myPrograms = p; }) : null,
@@ -1082,30 +1243,10 @@ async function renderClientHome(body) {
       sessionLine);
   }
 
-  // ---- Weeks: planned vs done, for this week and the 11 before ----
-  const weeks = Array.from({ length: 12 }, (_, i) => {
-    const start = addDays(weekStart, -7 * (11 - i));
-    const keys = Array.from({ length: 7 }, (_, d) => addDays(start, d));
-    const planned = keys.reduce((n, k) => n + plannedOn(k).length, 0);
-    const done = keys.reduce((n, k) => n + doneOn(k).length, 0);
-    return { start, keys, planned, done, hit: planned > 0 && done >= planned };
-  });
-  const thisWeek = weeks[11];
-  // Streak: weeks in a row with every planned workout done. Weeks with nothing
-  // planned are skipped, so a holiday doesn't break it.
-  let streak = 0;
-  for (let i = 10; i >= 0; i--) {
-    if (weeks[i].planned === 0) continue;
-    if (weeks[i].hit) streak++; else break;
-  }
-  if (thisWeek.hit) streak++;
-  let best = 0;
-  let run = 0;
-  for (const w of weeks) {
-    if (w.planned === 0) continue;
-    run = w.hit ? run + 1 : 0;
-    best = Math.max(best, run);
-  }
+  // ---- Weeks and streak (the chart shows this week and the 11 before) ----
+  const stats = streakStats(workouts, excused, todayK);
+  const { thisWeek, streak, best } = stats;
+  const weeks = stats.weeks.slice(-12);
   const total12 = weeks.reduce((n, w) => n + w.done, 0);
 
   // ---- This week card ----
@@ -1114,6 +1255,7 @@ async function renderClientHome(body) {
   let weekMsg;
   if (!target) weekMsg = thisWeek.done ? `${thisWeek.done} done this week, with nothing else planned.` : 'Nothing planned this week yet.';
   else if (!left) weekMsg = streak > 1 ? `Week done! That's ${streak} weeks in a row.` : 'Week done! Great work.';
+  else if (thisWeek.excused) weekMsg = `${TRAINER_NAME} has made this a rest week, so your streak is paused, not lost.`;
   else if (streak > 0) weekMsg = `${left} more to keep your ${streak}-week streak going.`;
   else weekMsg = `${left} to go this week.`;
   const R = 34;
@@ -1134,7 +1276,9 @@ async function renderClientHome(body) {
   }));
   const weekCard = h('section', { class: 'card week-card' },
     h('p', { class: 'eyebrow' }, 'This week'),
-    h('div', { class: 'week-top' }, ring, h('div', { class: 'week-side' }, h('p', { class: 'week-msg' }, weekMsg), dots)));
+    h('div', { class: 'week-top' }, ring, h('div', { class: 'week-side' }, h('p', { class: 'week-msg' }, weekMsg), dots)),
+    thisWeek.hit ? h('div', { class: 'week-seal', role: 'img', 'aria-label': `Week sealed: ${plural(streak, 'week')} in a row` },
+      h('b', { 'aria-hidden': 'true' }, String(streak)), h('span', { 'aria-hidden': 'true' }, 'in a row')) : null);
 
   // ---- Next session (when it isn't today) ----
   const nextSession = (state.sessions || []).find((x) => x.status === 'booked' && new Date(x.starts_at) > new Date() && x !== sessionToday);
@@ -1166,13 +1310,16 @@ async function renderClientHome(body) {
       h('div', {}, h('b', {}, String(streak)), h('span', {}, `week${streak === 1 ? '' : 's'} in a row`)),
       h('div', {}, h('b', {}, String(best)), h('span', {}, 'best streak')),
       h('div', {}, h('b', {}, String(total12)), h('span', {}, 'workouts done'))),
+    sealRow(stats),
+    h('p', { class: 'muted small' }, `${nextSealText(stats)} Seals are yours to keep, even if a streak ends.`),
     h('div', { class: 'bars', role: 'img', 'aria-label': `Workouts done per week for the last 12 weeks: ${weeks.map((w) => w.done).join(', ')}` },
-      weeks.map((w, i) => h('div', { class: 'bar-col', title: `Week of ${shortDay(w.start)}: ${w.done} of ${w.planned} done` },
+      weeks.map((w, i) => h('div', { class: 'bar-col' + (w.excused ? ' rest' : ''), title: `Week of ${shortDay(w.start)}: ${w.done} of ${w.planned} done${w.excused ? ' (rest week)' : ''}` },
         h('div', { class: 'bar-track' },
           w.planned ? h('div', { class: 'bar-plan', style: null, 'data-h': w.planned }) : null,
           h('div', { class: `bar ${w.hit ? 'hit' : w.done ? 'part' : ''}`, 'data-h': w.done })),
-        h('span', { 'aria-hidden': 'true' }, i === 11 ? 'Now' : '')))),
-    h('p', { class: 'muted small' }, 'Filled bars: every planned workout done that week. The outline shows what was planned.')) : null;
+        h('span', { 'aria-hidden': 'true' }, i === 11 ? 'Now' : w.excused ? 'Rest' : '')))),
+    h('p', { class: 'muted small' }, 'Filled bars: every planned workout done that week. The outline shows what was planned.',
+      weeks.some((w) => w.excused) ? ` "Rest" weeks from ${TRAINER_NAME} don't break your streak.` : '')) : null;
 
   fill(body,
     h('div', { class: 'stack home' },
@@ -1185,6 +1332,7 @@ async function renderClientHome(body) {
       consistency));
   // Bar heights as a share of the tallest week (set here, not inline in the markup).
   for (const el of body.querySelectorAll('[data-h]')) el.style.height = `${(Number(el.dataset.h) / maxBar) * 100}%`;
+  if (thisWeek.hit) celebrateWeek(stats);
 }
 
 // ---------------------------------------------------------------------------

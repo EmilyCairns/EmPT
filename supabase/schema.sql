@@ -203,6 +203,15 @@ create table if not exists public.sessions (
 create index if not exists sessions_client_start_idx on public.sessions (client_id, starts_at);
 create index if not exists sessions_start_idx on public.sessions (starts_at);
 
+-- Rest weeks: weeks the trainer marks as a holiday, illness or deload week.
+-- They pause a client's streak instead of breaking it. week_start is a Monday.
+create table if not exists public.excused_weeks (
+  client_id  uuid not null references public.clients (id) on delete cascade,
+  week_start date not null check (extract(isodow from week_start) = 1),
+  created_at timestamptz not null default now(),
+  primary key (client_id, week_start)
+);
+
 -- 2. Helper functions -------------------------------------------------
 
 -- Is the signed-in user the trainer?
@@ -456,6 +465,17 @@ alter table public.workout_feedback enable row level security;
 alter table public.announcements enable row level security;
 alter table public.sessions enable row level security;
 alter table public.programs enable row level security;
+alter table public.excused_weeks enable row level security;
+
+-- Rest weeks: the client sees their own; only the trainer writes.
+drop policy if exists "excused_weeks: read own or trainer" on public.excused_weeks;
+create policy "excused_weeks: read own or trainer" on public.excused_weeks
+  for select to authenticated
+  using (public.is_trainer() or client_id = public.my_client_id());
+drop policy if exists "excused_weeks: trainer writes" on public.excused_weeks;
+create policy "excused_weeks: trainer writes" on public.excused_weeks
+  for all to authenticated
+  using (public.is_trainer()) with check (public.is_trainer());
 
 -- Programs: the client sees their own once it's been sent to them; only the
 -- trainer writes (clients schedule through schedule_program()).
@@ -603,7 +623,7 @@ create policy "messages: send as yourself" on public.messages
 -- 5. Permissions ------------------------------------------------------
 revoke all on public.trainers, public.clients, public.workouts, public.messages, public.client_notes,
   public.exercises, public.client_maxes, public.set_logs, public.workout_feedback, public.announcements,
-  public.sessions, public.programs from anon, authenticated;
+  public.sessions, public.programs, public.excused_weeks from anon, authenticated;
 grant select, insert, update, delete on public.clients, public.workouts, public.client_notes,
   public.exercises, public.client_maxes to authenticated;
 grant select, insert, delete on public.set_logs to authenticated;
@@ -611,6 +631,7 @@ grant select, insert, update, delete on public.workout_feedback to authenticated
 grant select, insert, update, delete on public.announcements to authenticated;
 grant select, insert, update, delete on public.sessions to authenticated;
 grant select, insert, update, delete on public.programs to authenticated;
+grant select, insert, delete on public.excused_weeks to authenticated;
 grant select, insert on public.messages to authenticated;
 
 revoke execute on function public.schedule_program(uuid, int[], date) from public, anon;
