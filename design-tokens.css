@@ -28,6 +28,7 @@
   --color-graphite: #515151;         /* Captions, dates, helper text, placeholders */
   --color-ash: #808988;              /* Input borders only (the one cool neutral) */
   --color-brick: #8a2c1c;            /* Destructive actions and errors ONLY */
+  --color-camel: #c9a27e;            /* Warm brown: sessions with the trainer ONLY */
 
   /* ===== 2. ROLES ====================================================== */
   --color-bg: var(--color-parchment);              /* Page background */
@@ -56,8 +57,8 @@
   --color-toast-bg: var(--color-ink);
   --color-toast-text: var(--color-parchment);
   --color-backdrop: rgb(42 43 47 / 0.45);          /* Ink-tinted dim behind dialogs */
-  --color-session-bg: var(--color-ink);            /* Sessions with the trainer stand out: a dark card… */
-  --color-session-text: var(--color-parchment);    /* …with light writing (13.5 : 1) */
+  --color-session-bg: var(--color-camel);          /* Sessions with the trainer stand out: a warm brown card… */
+  --color-session-text: var(--color-ink);          /* …with Ink writing (6 : 1) */
 
   /* Plate calculator drawing: the standard gym plate colours, so clients
      recognise them. The ONLY place these colours may be used (see

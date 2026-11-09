@@ -552,9 +552,9 @@ input[type="checkbox"], input[type="radio"] {
   color: var(--color-session-text);
   font-weight: var(--weight-semibold);
 }
-/* The "Next session" card on Home: dark, like sessions on the calendar. */
+/* The "Next session" card on Home: warm brown, like sessions on the calendar. */
 .session-callout { border: 0; border-left: var(--space-1) solid var(--color-accent); background: var(--color-session-bg); color: var(--color-session-text); }
-.session-callout .eyebrow { color: var(--color-session-text); opacity: 0.8; }
+.session-callout .eyebrow { color: var(--color-session-text); }
 .session-callout .btn { border-color: var(--color-session-text); color: var(--color-session-text); }
 .session-callout .btn:hover:not(:disabled) { background: transparent; opacity: 0.85; }
 .ex-lines { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
@@ -832,9 +832,9 @@ input[type="checkbox"], input[type="radio"] {
   cursor: pointer;
 }
 button.cal-chip { align-items: flex-start; border-left: var(--space-1) solid var(--color-accent); background: var(--color-surface-raised); }
-/* Sessions with the trainer: a dark card so they stand out on the page. */
+/* Sessions with the trainer: a warm brown card so they stand out on the page. */
 button.cal-chip.session { border-left-color: var(--color-accent); background: var(--color-session-bg); color: var(--color-session-text); }
-button.cal-chip.session span { color: var(--color-session-text); opacity: 0.8; }
+button.cal-chip.session span { color: var(--color-session-text); }
 button.cal-chip.session:focus-visible { outline: var(--border-width-strong) solid var(--color-focus); outline-offset: var(--border-width-strong); }
 .cal-chip-main { align-items: flex-start; }
 .cal-chip b { font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
