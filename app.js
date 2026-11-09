@@ -1257,8 +1257,9 @@ const svgEl = (tag, attrs = {}, ...kids) => {
 // Plate drawing sizes (SVG units): [height, thickness]. Bigger plates are
 // taller and thicker; every plate is wide enough to print its weight on.
 const PLATE_SHAPE = { 25: [116, 28], 20: [112, 26], 15: [100, 24], 10: [86, 22], 5: [66, 20], 2.5: [52, 19], 1.25: [44, 18] };
-// Dark plates get light writing, light plates get dark writing.
-const DARK_PLATES = new Set([25, 20, 15]);
+// Light writing on red, blue and green plates; dark writing on yellow,
+// white and silver ones.
+const DARK_PLATES = new Set([25, 20, 10, 2.5]);
 function barbellPicture(plates, bar) {
   const W = 360, H = 128, mid = H / 2, collarL = 148, collarR = W - 148, sleeveEnd = 6;
   const shape = (p) => PLATE_SHAPE[p] || [Math.min(116, 40 + p * 3), 20];

@@ -57,18 +57,19 @@
   --color-toast-text: var(--color-parchment);
   --color-backdrop: rgb(42 43 47 / 0.45);          /* Ink-tinted dim behind dialogs */
 
-  /* Plate calculator drawing: heavier plates are darker. Warm neutrals
-     only, so the single-accent rule holds. */
-  --plate-25: var(--color-ink);
-  --plate-20: var(--color-charcoal);
-  --plate-15: var(--color-graphite);
-  --plate-10: var(--color-warm-taupe);
-  --plate-5: var(--color-aged-paper);
-  --plate-2-5: var(--color-parchment);
-  --plate-1-25: var(--color-parchment);   /* Same as 2.5: told apart by size and the printed number */
-  --plate-outline: var(--color-graphite);
-  --plate-label-on-dark: var(--color-parchment);  /* Weight printed on 25/20/15 kg plates */
-  --plate-label-on-light: var(--color-ink);       /* Weight printed on 10 kg and lighter */
+  /* Plate calculator drawing: the standard gym plate colours, so clients
+     recognise them. The ONLY place these colours may be used (see
+     DESIGN.md, Colour rule 3). Tuned slightly warm to sit on parchment. */
+  --plate-25: #b3362b;    /* Red */
+  --plate-20: #2a5a9c;    /* Blue */
+  --plate-15: #e9b62b;    /* Yellow */
+  --plate-10: #2f7449;    /* Green */
+  --plate-5: var(--color-parchment);  /* White */
+  --plate-2-5: #b3362b;   /* Red (small) */
+  --plate-1-25: #c4c6c8;  /* Silver */
+  --plate-outline: var(--color-charcoal);
+  --plate-label-on-dark: var(--color-parchment);  /* On red, blue, green (5.4 : 1 or more) */
+  --plate-label-on-light: var(--color-ink);       /* On yellow, white, silver (7.5 : 1 or more) */
   --bar-steel: var(--color-graphite);
   --bar-sleeve: var(--color-ash);
 
