@@ -55,7 +55,7 @@ Supabase's built-in email sender only allows a few sign-in emails per hour. That
 ## Everyday use
 
 1. Open the app and sign in with your trainer email.
-2. **+ New client** after a first consult: enter their name. Email is optional at this point.
+2. **+ New client** after a first consult: enter their name. Email is optional at this point. In **Edit client** you can also set **How they pay** (Ezidebit, Stripe in the app, bank transfer or other). Only you see it, in your client list and on their page.
 3. On the **Consult notes** tab, jot quick private notes: injuries and conditions, goals in their words, training history, anything else. **Only you can see these**; the database blocks clients from them entirely. Notes save as you type, and **Copy notes** puts a tidy summary on your clipboard to paste into a chat with Claude.
 4. In **Their goals** on the same tab, write the friendly version the client will see on their page.
 5. When you're ready to give them access, click **Add email**. That creates their account. Send the client the app link. They type their email, tap the link they receive, and they're in. On their phone they can use "Add to Home Screen" to install it like an app.

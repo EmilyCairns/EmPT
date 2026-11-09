@@ -39,6 +39,9 @@ create table if not exists public.client_notes (
   other        text not null default '',
   updated_at   timestamptz not null default now()
 );
+-- How the client pays (private to the trainer, like the rest of this table).
+alter table public.client_notes add column if not exists payment_method text
+  check (payment_method in ('ezidebit', 'stripe', 'transfer', 'other'));
 
 -- Workouts. "exercises" is a list of objects with string values:
 -- { name, exercise_id, sets, reps, pct, rm, load, rest, notes }

@@ -14,7 +14,7 @@
 do $$
 declare
   test_email constant text := 'emilycairnsfitness+test@gmail.com';
-  tz constant text := 'Europe/London';
+  tz constant text := 'Australia/Perth';
   c uuid;
   ex_squat uuid; ex_rdl uuid; ex_press uuid; ex_row uuid; ex_plank uuid; ex_lunge uuid;
   w_done uuid;

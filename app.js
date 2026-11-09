@@ -250,10 +250,28 @@ async function route(session) {
 // ---------------------------------------------------------------------------
 
 async function loadClients() {
-  const { data, error } = await sb.from('clients').select('*').order('full_name');
+  const [{ data, error }, pay] = await Promise.all([
+    sb.from('clients').select('*').order('full_name'),
+    // How each client pays. Stored with the private consult notes, so only
+    // the trainer can ever read it. null = that column isn't in the database yet.
+    sb.from('client_notes').select('client_id,payment_method'),
+  ]);
   if (error) { toast(error.message, true); return; }
   state.clients = data;
+  state.payMethods = pay.error ? null : new Map(pay.data.map((r) => [r.client_id, r.payment_method]));
 }
+
+// How a client pays (trainer only). Keys are stored; labels can change.
+const PAY_METHODS = [
+  ['ezidebit', 'Ezidebit'],
+  ['stripe', 'Stripe (in the app)'],
+  ['transfer', 'Bank transfer'],
+  ['other', 'Other'],
+];
+const payLabel = (clientId) => {
+  const key = state.payMethods?.get(clientId);
+  return key ? `Pays by ${PAY_METHODS.find(([k]) => k === key)?.[1] || key}` : null;
+};
 
 async function startTrainer() {
   await Promise.all([loadClients(), loadLibrary(), loadNotices(), loadSessions()]);
@@ -315,7 +333,7 @@ function renderClientList() {
       onclick: () => selectClient(c.id),
     },
       h('span', { class: 'client-name' }, c.full_name, state.unread.has(c.id) ? h('span', { class: 'dot', title: 'New message' }) : null),
-      h('span', { class: 'muted small' }, c.email || 'No account yet'))));
+      h('span', { class: 'muted small' }, [c.email || 'No account yet', payLabel(c.id)].filter(Boolean).join(' · ')))));
 }
 
 function selectClient(id) {
@@ -390,7 +408,7 @@ function renderPanel() {
       }, '← Clients'),
       h('div', { class: 'panel-title' },
         h('h2', {}, c.full_name),
-        h('p', { class: 'muted small' }, c.email || 'No account yet')),
+        h('p', { class: 'muted small' }, [c.email || 'No account yet', payLabel(c.id)].filter(Boolean).join(' · '))),
       h('button', { class: 'btn ghost small', onclick: () => openClientDialog(c) }, 'Edit client')),
     hasAccount ? null : h('div', { class: 'callout' },
       h('div', {},
@@ -410,6 +428,10 @@ function renderPanel() {
 function openClientDialog(c, { focusEmail = false } = {}) {
   const name = h('input', { required: true, maxlength: '100', value: c?.full_name || '', autocomplete: 'off' });
   const email = h('input', { type: 'email', value: c?.email || '', autocomplete: 'off', placeholder: 'Add now or later' });
+  const currentPay = c ? state.payMethods?.get(c.id) || '' : '';
+  const pay = state.payMethods ? h('select', {},
+    h('option', { value: '' }, 'Not set'),
+    PAY_METHODS.map(([key, label]) => h('option', { value: key, selected: currentPay === key || null }, label))) : null;
   let dlg;
   const extra = c ? h('button', {
     type: 'button',
@@ -436,6 +458,7 @@ function openClientDialog(c, { focusEmail = false } = {}) {
     fields: [
       field('Full name', name),
       field('Email (optional)', email, emailHint),
+      pay ? field('How they pay (only you see this)', pay) : null,
     ],
     extra,
     onSubmit: async () => {
@@ -445,6 +468,11 @@ function openClientDialog(c, { focusEmail = false } = {}) {
         : sb.from('clients').insert(row).select().single();
       const { data, error } = await query;
       if (error) return error.code === '23505' ? 'A client with that email already exists.' : error.message;
+      const payValue = pay?.value || null;
+      if (pay && payValue !== (state.payMethods.get(data.id) || null)) {
+        const { error: payError } = await sb.from('client_notes').upsert({ client_id: data.id, payment_method: payValue });
+        if (payError) toast(`Saved, but the payment method didn't save: ${payError.message}`, true);
+      }
       await loadClients();
       state.selectedId = data.id;
       if (!c) state.tab = 'notes';
