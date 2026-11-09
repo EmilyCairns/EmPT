@@ -834,6 +834,7 @@ function renderClientApp() {
   if (state.activeWorkout) return renderWorkoutPage();
   if (state.activeProgram) return renderProgramPage();
   if (state.tab === 'sessions') state.tab = 'calendar'; // sessions now live on the calendar
+  if (state.tab === 'workouts') state.tab = 'program';  // workouts now live under Program
   const body = h('div', { class: 'tab-body' });
   mount(header(), h('main', { class: 'client-main' },
     h('h1', {}, 'Hi ', h('em', {}, firstName(state.me.full_name))),
@@ -842,50 +843,147 @@ function renderClientApp() {
       // (with a "See all" link), so they don't need a tab of their own.
       ['home', ['Home', unseenNotices() ? h('span', { class: 'dot', title: 'New post' }) : null]],
       ['calendar', 'Calendar'],
-      ['workouts', 'Workouts'],
+      ['program', 'Program'],
       state.lifting ? ['lifts', 'Lifts'] : null,
       ['chat', 'Chat'],
     ].filter(Boolean), renderClientApp),
     body));
   if (state.tab === 'home' || (state.tab === 'notices' && !state.notices)) renderClientHome(body);
   else if (state.tab === 'calendar') renderClientCalendar(body);
-  else if (state.tab === 'workouts' || (state.tab === 'lifts' && !state.lifting)) renderClientWorkouts(body);
+  else if (state.tab === 'program' || (state.tab === 'lifts' && !state.lifting)) renderClientProgramTab(body);
   else if (state.tab === 'lifts') renderLifts(body, state.me, { asTrainer: false });
   else if (state.tab === 'notices') renderClientNotices(body);
   else renderChat(body, state.me.id, 'client');
 }
 
-async function renderClientWorkouts(body) {
+// ---------------------------------------------------------------------------
+// Client: Program tab (current program, other workouts, past programs)
+// ---------------------------------------------------------------------------
+
+// Splits scheduled programs into the current one and past ones. A program
+// stays "current" until a week after its last workout.
+function sortPrograms(programs, workouts) {
+  const todayK = today();
+  const scheduled = (programs || []).filter((p) => p.status === 'scheduled').map((p) => {
+    const ws = workouts.filter((w) => w.program_id === p.id);
+    const dates = ws.map((w) => w.workout_date).filter(Boolean).sort();
+    return { p, ws, first: dates[0] || p.start_date, last: dates.at(-1) || p.start_date };
+  }).sort((a, b) => (b.first || '').localeCompare(a.first || ''));
+  const current = scheduled.find((x) => x.last && x.last >= addDays(todayK, -7)) || null;
+  return { current, past: scheduled.filter((x) => x !== current) };
+}
+
+// The week a client is up to: the first week with something left to do.
+const currentWeekOf = (pr, ws) => Math.min(...ws.filter((w) => !w.completed_at).map((w) => w.program_week || pr.weeks), pr.weeks);
+
+// One workout in a program week.
+function programRow(w) {
+  const todayK = today();
+  const done = !!w.completed_at;
+  const isToday = w.workout_date === todayK;
+  const missed = !done && w.workout_date && w.workout_date < todayK;
+  const n = (w.exercises || []).length;
+  const d = w.workout_date ? dateOf(w.workout_date) : null;
+  return h('li', { class: 'prog-row' + (done ? ' done' : '') + (isToday ? ' today' : '') + (missed ? ' missed' : '') },
+    h('div', { class: 'prog-row-date' },
+      h('span', {}, d ? d.toLocaleDateString(undefined, { weekday: 'short' }) : 'Any'),
+      h('b', {}, d ? String(d.getDate()) : '–')),
+    h('div', { class: 'prog-row-main' },
+      h('b', {}, w.title),
+      h('span', {}, [`${n} exercise${n === 1 ? '' : 's'}`, done ? '✓ Done' : isToday ? 'Today' : missed ? 'Missed' : null].filter(Boolean).join(' · '))),
+    h('button', {
+      class: 'btn small' + (!done && (isToday || missed) ? ' primary' : done ? ' ghost' : ''),
+      onclick: () => { state.activeWorkout = w.id; renderClientApp(); },
+    }, done ? 'View' : isToday || missed ? 'Start' : 'Preview'));
+}
+
+// A program's workouts, week by week; the week the client is up to is open.
+function programWeeks(pr, ws, openWeek) {
+  const byDate = (a, b) => (a.workout_date || '').localeCompare(b.workout_date || '');
+  return Array.from({ length: pr.weeks }, (_, i) => i + 1).map((n) => {
+    const list = ws.filter((w) => w.program_week === n).sort(byDate);
+    if (!list.length) return null;
+    const done = list.filter((w) => w.completed_at).length;
+    const dates = list.map((w) => w.workout_date).filter(Boolean);
+    const range = dates.length ? `${dateOf(dates[0]).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} – ${dateOf(dates.at(-1)).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}` : '';
+    return h('details', { class: 'prog-week', open: n === openWeek || null },
+      h('summary', {},
+        h('span', { class: 'prog-week-title' }, `Week ${n}`),
+        h('span', { class: 'muted small' }, range),
+        h('span', { class: 'prog-week-count' + (done === list.length ? ' complete' : '') }, done === list.length ? '✓ Done' : `${done}/${list.length}`)),
+      h('ol', { class: 'prog-rows' }, list.map(programRow)));
+  });
+}
+
+// Week number, workouts done and training days as three tiles.
+function programFacts(pr, ws) {
+  const done = ws.filter((w) => w.completed_at).length;
+  const week = ws.length ? currentWeekOf(pr, ws) : 1;
+  return h('div', { class: 'program-facts' },
+    h('div', {}, h('b', {}, `${done === ws.length && ws.length ? pr.weeks : week}/${pr.weeks}`), h('span', {}, 'weeks')),
+    h('div', {}, h('b', {}, `${done}/${ws.length}`), h('span', {}, 'workouts done')),
+    h('div', {}, h('b', { class: 'facts-days' }, daysText(pr.training_days) || '–'), h('span', {}, 'training days')));
+}
+
+const aimBox = (pr) => (pr.notes ? h('div', { class: 'goals program-aim' }, h('p', { class: 'eyebrow' }, `From ${TRAINER_NAME}`), h('p', {}, pr.notes)) : null);
+
+async function renderClientProgramTab(body) {
   body.replaceChildren(h('p', { class: 'muted' }, 'Loading…'));
-  const [{ data, error }, ctx] = await Promise.all([
+  const [{ data, error }, ctx, programs] = await Promise.all([
     sb.from('workouts').select('*').eq('client_id', state.me.id).eq('is_draft', false)
       .order('workout_date', { ascending: true, nullsFirst: true })
       .order('created_at', { ascending: true }),
     loadTrainingData(state.me.id),
+    state.myPrograms !== null ? loadPrograms(state.me.id) : Promise.resolve(null),
   ]);
   if (!body.isConnected) return;
   if (error) { body.replaceChildren(h('p', { class: 'error' }, error.message)); return; }
-  // (Pinned notices and the next session now live on the Home tab.)
-  if (!data.length) {
-    fill(body, h('div', { class: 'empty' }, h('p', { class: 'muted' }, `No workouts yet. ${TRAINER_NAME} will add them here.`)));
-    return;
-  }
-  const now = today();
-  const upcoming = data.filter((w) => !w.completed_at && (!w.workout_date || w.workout_date >= now));
-  const past = data.filter((w) => !upcoming.includes(w)).reverse();
-  const refresh = () => renderClientWorkouts(body);
-  const card = (w) => workoutCard(w, {
-    onChange: refresh,
-    ...ctx,
-    onLog: state.lifting ? () => { state.activeWorkout = w.id; renderClientApp(); } : null,
-  });
-  fill(body,
-    h('h3', {}, 'Up next'),
-    upcoming.length
-      ? h('div', { class: 'stack' }, upcoming.map(card))
-      : h('p', { class: 'muted' }, "You're all caught up."),
-    past.length ? h('h3', {}, 'Past and completed') : null,
-    past.length ? h('div', { class: 'stack' }, past.map(card)) : null);
+  if (programs) state.myPrograms = programs;
+  const refresh = () => renderClientProgramTab(body);
+  const { current, past } = sortPrograms(programs, data);
+  const offered = (programs || []).find((p) => p.status === 'offered');
+  const inPrograms = new Set([current, ...past].filter(Boolean).flatMap((x) => x.ws.map((w) => w.id)));
+  const others = data.filter((w) => !inPrograms.has(w.id));
+
+  const offerCard = offered ? h('section', { class: 'card program-offer' },
+    h('p', { class: 'eyebrow' }, `New program from ${TRAINER_NAME}`),
+    h('h2', {}, offered.title),
+    h('p', { class: 'muted small' }, `${offered.weeks} week${offered.weeks === 1 ? '' : 's'} · ${offered.days_per_week} workout${offered.days_per_week === 1 ? '' : 's'} a week`),
+    h('button', { class: 'btn primary block', onclick: () => { state.activeProgram = offered.id; renderClientApp(); } }, 'See it and pick your days →')) : null;
+
+  const currentBlock = current ? h('section', { class: 'program-current' },
+    h('p', { class: 'eyebrow' }, `Your program · Week ${currentWeekOf(current.p, current.ws)} of ${current.p.weeks}`),
+    h('h2', { class: 'program-title' }, current.p.title),
+    aimBox(current.p),
+    programFacts(current.p, current.ws),
+    h('div', { class: 'stack prog-weeks' }, programWeeks(current.p, current.ws, currentWeekOf(current.p, current.ws))),
+    h('div', { class: 'row-end' }, h('button', { class: 'btn ghost small', onclick: () => { state.tab = 'calendar'; renderClientApp(); } }, 'See it on my calendar →')))
+    : offered ? null
+      : h('div', { class: 'empty' }, h('p', { class: 'muted' }, `No program yet. When ${TRAINER_NAME} sets one up, it'll appear here.`));
+
+  // One-off workouts that aren't part of a program.
+  const otherUpcoming = others.filter((w) => !w.completed_at && (!w.workout_date || w.workout_date >= today()));
+  const otherPast = others.filter((w) => !otherUpcoming.includes(w)).reverse().slice(0, 10);
+  const card = (w) => workoutCard(w, { onChange: refresh, ...ctx, onLog: state.lifting ? () => { state.activeWorkout = w.id; renderClientApp(); } : null });
+  const otherBlock = others.length ? h('section', {},
+    h('h3', {}, current || offered ? 'Other workouts' : 'Your workouts'),
+    otherUpcoming.length ? h('div', { class: 'stack' }, otherUpcoming.map(card)) : null,
+    otherPast.length ? h('details', { class: 'prog-week' },
+      h('summary', {}, h('span', { class: 'prog-week-title' }, 'Done and past'), h('span', { class: 'muted small' }, `${otherPast.length}`)),
+      h('div', { class: 'stack' }, otherPast.map(card))) : null) : null;
+
+  const pastBlock = past.length ? h('section', {},
+    h('h3', {}, 'Past programs'),
+    h('div', { class: 'stack' }, past.map(({ p, ws, first, last }) => {
+      const done = ws.filter((w) => w.completed_at).length;
+      return h('button', { class: 'past-program', onclick: () => { state.activeProgram = p.id; renderClientApp(); } },
+        h('span', { class: 'past-program-main' },
+          h('b', {}, p.title),
+          h('span', { class: 'muted small' }, [first && last ? `${shortDay(first)} – ${shortDay(last)}` : null, `${p.weeks} week${p.weeks === 1 ? '' : 's'}`].filter(Boolean).join(' · '))),
+        h('span', { class: 'past-program-score' }, `${done}/${ws.length}`, h('small', {}, 'done')));
+    }))) : null;
+
+  fill(body, h('div', { class: 'stack program-tab' }, offerCard, currentBlock, otherBlock, pastBlock));
 }
 
 // ---------------------------------------------------------------------------
@@ -953,7 +1051,7 @@ async function renderClientHome(body) {
       todays.filter((w) => !w.completed_at).length > 1 ? h('p', { class: 'muted small' }, `+ ${todays.filter((w) => !w.completed_at).length - 1} more workout today`) : null,
       sessionLine,
       state.lifting ? h('button', { class: 'btn primary block', onclick: () => open(todo) }, 'Start workout →')
-        : h('button', { class: 'btn primary block', onclick: () => goTab('workouts') }, 'See workout →'));
+        : h('button', { class: 'btn primary block', onclick: () => goTab('program') }, 'See workout →'));
   } else if (todays.length) {
     const doneW = todays[todays.length - 1];
     todayCard = h('section', { class: 'card today-card done' },
@@ -963,7 +1061,7 @@ async function renderClientHome(body) {
       h('p', { class: 'today-msg' }, 'Nice work. That one’s in the bank.'),
       h('p', { class: 'muted small' }, nextLine(upcoming[0])),
       sessionLine,
-      h('button', { class: 'btn block', onclick: () => (state.lifting ? open(doneW) : goTab('workouts')) }, 'View workout'));
+      h('button', { class: 'btn block', onclick: () => (state.lifting ? open(doneW) : goTab('program')) }, 'View workout'));
   } else if (workouts.length) {
     const catchUp = missedThisWeek[0];
     todayCard = h('section', { class: 'card today-card rest' },
@@ -973,9 +1071,9 @@ async function renderClientHome(body) {
       sessionLine,
       catchUp
         ? [h('p', { class: 'muted small' }, `Missed ${dateOf(catchUp.workout_date).toLocaleDateString(undefined, { weekday: 'long' })}'s ${catchUp.title}? Today's a good day to catch up.`),
-          h('button', { class: 'btn primary block', onclick: () => (state.lifting ? open(catchUp) : goTab('workouts')) }, 'Catch up →')]
+          h('button', { class: 'btn primary block', onclick: () => (state.lifting ? open(catchUp) : goTab('program')) }, 'Catch up →')]
         : [h('p', { class: 'muted small' }, nextLine(upcoming[0])),
-          h('button', { class: 'btn block', onclick: () => goTab('workouts') }, 'See my workouts')]);
+          h('button', { class: 'btn block', onclick: () => goTab('program') }, 'See my program')]);
   } else {
     todayCard = h('section', { class: 'card today-card rest' },
       h('p', { class: 'eyebrow' }, `Today · ${shortDay(todayK)}`),
@@ -1751,7 +1849,7 @@ async function renderWorkoutPage() {
 
   mount(header(), h('main', { class: 'client-main workout-page' },
     timer.el,
-    h('button', { class: 'btn ghost small back-link', onclick: leave }, '← Back to workouts'),
+    h('button', { class: 'btn ghost small back-link', onclick: leave }, '← Back'),
     h('p', { class: 'eyebrow' }, [w.workout_date ? formatDate(w.workout_date) : 'Any day', w.program_week ? `Week ${w.program_week}` : null].filter(Boolean).join(' · ')),
     h('h1', {}, w.title),
     w.notes ? h('p', { class: 'lead' }, w.notes) : null,
@@ -2310,7 +2408,7 @@ function programCard(c, pr, refresh) {
 function openProgramDialog(c, pr, refresh) {
   const scheduled = pr?.status === 'scheduled';
   const title = h('input', { required: true, maxlength: '120', value: pr?.title || '', placeholder: 'e.g. Strength block 1' });
-  const notes = h('textarea', { rows: '3', maxlength: '2000', value: pr?.notes || '', placeholder: 'What this block is for, how it should feel…' });
+  const notes = h('textarea', { rows: '3', maxlength: '2000', value: pr?.notes || '', placeholder: 'e.g. Build a strength base before your 10k: steady loads, perfect technique, 3 sessions a week.' });
   const weeks = h('select', { disabled: scheduled || null }, Array.from({ length: 16 }, (_, i) => i + 1)
     .map((w) => h('option', { value: String(w), selected: (pr?.weeks ?? 4) === w || null }, `${w} week${w === 1 ? '' : 's'}`)));
   const perWeek = h('select', { disabled: scheduled || null }, [1, 2, 3, 4, 5, 6, 7]
@@ -2320,7 +2418,7 @@ function openProgramDialog(c, pr, refresh) {
     submitLabel: pr ? 'Save' : 'Create',
     fields: [
       field('Name', title),
-      field('Note for the client (optional)', notes),
+      field('Aim of the program / note for the client (optional)', notes, 'Shown in a box at the top of their Program tab.'),
       h('div', { class: 'two-col' }, field('Length', weeks), field('Workouts per week', perWeek)),
       scheduled
         ? h('p', { class: 'muted small' }, 'This program is already on the calendar, so its length can no longer change.')
@@ -2371,13 +2469,25 @@ async function renderProgramPage() {
   if (!pr) { toast('That program is no longer available.', true); return leave(); }
   const n = pr.days_per_week;
   const total = pr.weeks * n;
-  let action;
+  // A program already on the calendar (current or past): show how it went.
   if (pr.status === 'scheduled') {
-    action = h('section', { class: 'card' },
-      h('p', { class: 'eyebrow' }, 'On your calendar'),
-      h('p', {}, `${daysText(pr.training_days)}, starting ${pr.start_date ? shortDay(pr.start_date) : ''}.`),
-      h('button', { class: 'btn primary block', onclick: () => { state.activeProgram = null; state.tab = 'calendar'; renderClientApp(); } }, 'Open my calendar →'));
-  } else {
+    const { data: ws } = await sb.from('workouts').select('*').eq('client_id', state.me.id).eq('program_id', pr.id).eq('is_draft', false);
+    if (state.activeProgram !== id) return;
+    const list = ws || [];
+    const { current } = sortPrograms(state.myPrograms, list);
+    const isCurrent = current?.p.id === pr.id;
+    mount(header(), h('main', { class: 'client-main program-page' },
+      h('button', { class: 'btn ghost small back-link', onclick: leave }, '← Back'),
+      h('p', { class: 'eyebrow' }, isCurrent ? 'Your program' : 'Past program'),
+      h('h1', {}, pr.title),
+      aimBox(pr),
+      programFacts(pr, list),
+      h('h3', {}, isCurrent ? 'Week by week' : 'How it went'),
+      h('div', { class: 'stack prog-weeks' }, programWeeks(pr, list, isCurrent ? currentWeekOf(pr, list) : null))));
+    return;
+  }
+  let action;
+  {
     const sp = schedulePicker(pr);
     const add = h('button', { class: 'btn primary block', disabled: true }, 'Add to my calendar');
     sp.onChange(() => { add.disabled = !sp.ready(); });
@@ -2398,10 +2508,10 @@ async function renderProgramPage() {
       add);
   }
   mount(header(), h('main', { class: 'client-main program-page' },
-    h('button', { class: 'btn ghost small back-link', onclick: leave }, '← Home'),
-    h('p', { class: 'eyebrow' }, pr.status === 'scheduled' ? 'Your program' : `New program from ${TRAINER_NAME}`),
+    h('button', { class: 'btn ghost small back-link', onclick: leave }, '← Back'),
+    h('p', { class: 'eyebrow' }, `New program from ${TRAINER_NAME}`),
     h('h1', {}, pr.title),
-    pr.notes ? h('p', { class: 'lead' }, pr.notes) : null,
+    aimBox(pr),
     h('div', { class: 'program-facts' },
       h('div', {}, h('b', {}, String(pr.weeks)), h('span', {}, `week${pr.weeks === 1 ? '' : 's'}`)),
       h('div', {}, h('b', {}, String(n)), h('span', {}, 'a week')),

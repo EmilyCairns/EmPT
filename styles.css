@@ -645,6 +645,86 @@ input[type="checkbox"], input[type="radio"] {
 .date-chip.current { border-style: dashed; }
 .date-chip:disabled { opacity: 0.5; cursor: default; }
 
+/* ---- Client Program tab ----------------------------------------------- */
+
+.program-tab h3 { margin: var(--space-6) 0 var(--space-3); }
+.program-current > .eyebrow { margin-bottom: var(--space-1); }
+.program-title { margin: 0; font-size: var(--text-heading); line-height: var(--leading-heading); }
+.program-aim { margin-top: var(--space-4); }
+.program-facts .facts-days { font-family: var(--font-body); font-size: var(--text-body); font-weight: var(--weight-semibold); line-height: var(--leading-subheading); letter-spacing: var(--tracking-body); }
+.prog-weeks { margin-top: var(--space-2); }
+.prog-week {
+  overflow: hidden;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-cards);
+  background: var(--color-surface);
+}
+.prog-week > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  cursor: pointer;
+  list-style: none;
+}
+.prog-week > summary::-webkit-details-marker { display: none; }
+.prog-week > summary::after { content: "▾"; margin-left: var(--space-1); color: var(--color-text-muted); transition: transform var(--motion-fast); }
+.prog-week[open] > summary::after { transform: rotate(180deg); }
+.prog-week > summary:focus-visible { outline: var(--border-width-strong) solid var(--color-focus); outline-offset: calc(-1 * var(--border-width-strong)); }
+.prog-week-title { font-family: var(--font-display); font-size: var(--text-title); letter-spacing: normal; }
+.prog-week-count { margin-left: auto; color: var(--color-text-muted); font-size: var(--text-body-sm); font-weight: var(--weight-semibold); }
+.prog-week-count.complete { color: var(--color-accent-text); }
+.prog-week > .stack { padding: 0 var(--space-4) var(--space-4); }
+.prog-rows { margin: 0; padding: 0; list-style: none; }
+.prog-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  border-top: var(--border-width) solid var(--color-border);
+}
+.prog-row-date { display: flex; flex-direction: column; align-items: center; width: var(--space-10); flex: none; }
+.prog-row-date span { color: var(--color-text-muted); font-size: var(--text-eyebrow); font-weight: var(--weight-semibold); text-transform: uppercase; }
+.prog-row-date b {
+  display: grid;
+  place-items: center;
+  width: var(--space-8);
+  height: var(--space-8);
+  border-radius: var(--radius-pills);
+  font-size: var(--text-body-lg);
+  font-weight: var(--weight-semibold);
+}
+.prog-row.today .prog-row-date b { background: var(--color-accent); color: var(--color-on-accent); }
+.prog-row-main { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.prog-row-main b { font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
+.prog-row-main span { color: var(--color-text-muted); font-size: var(--text-body-sm); }
+.prog-row.done .prog-row-main b { color: var(--color-text-muted); }
+.prog-row.missed .prog-row-main span { color: var(--color-text); }
+
+/* A past program: one tappable line. */
+.past-program {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+  padding: var(--space-4) var(--space-5);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-cards);
+  background: var(--color-surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--motion-fast);
+}
+.past-program:hover { background: var(--color-surface-raised); }
+.past-program:focus-visible { outline: var(--border-width-strong) solid var(--color-focus); outline-offset: var(--border-width-strong); }
+.past-program-main { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.past-program-main b { font-family: var(--font-display); font-size: var(--text-title); font-weight: var(--weight-regular); letter-spacing: normal; }
+.past-program-score { display: flex; flex-direction: column; align-items: flex-end; font-family: var(--font-display); font-size: var(--text-title); }
+.past-program-score small { color: var(--color-text-muted); font-family: var(--font-body); font-size: var(--text-eyebrow); }
+
 /* ---- Client calendar (weeks of days, Runna-style) --------------------- */
 
 .cal-help { margin: 0 0 var(--space-2); }
