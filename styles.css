@@ -542,7 +542,21 @@ input[type="checkbox"], input[type="radio"] {
 .today-card .badge { margin: 0 0 var(--space-3); }
 .today-card.done, .today-card.rest { background: var(--color-surface); border: var(--border-width) solid var(--color-border); }
 .today-msg { margin: 0 0 var(--space-2); font-size: var(--text-body-lg); font-weight: var(--weight-light); color: var(--color-text-body); }
-.today-session { margin: var(--space-3) 0 0; font-weight: var(--weight-semibold); }
+.today-session {
+  display: inline-block;
+  margin: var(--space-3) 0 0;
+  padding: var(--space-2) var(--space-4);
+  border-left: var(--space-1) solid var(--color-accent);
+  border-radius: var(--radius-nav);
+  background: var(--color-session-bg);
+  color: var(--color-session-text);
+  font-weight: var(--weight-semibold);
+}
+/* The "Next session" card on Home: dark, like sessions on the calendar. */
+.session-callout { border: 0; border-left: var(--space-1) solid var(--color-accent); background: var(--color-session-bg); color: var(--color-session-text); }
+.session-callout .eyebrow { color: var(--color-session-text); opacity: 0.8; }
+.session-callout .btn { border-color: var(--color-session-text); color: var(--color-session-text); }
+.session-callout .btn:hover:not(:disabled) { background: transparent; opacity: 0.85; }
 .ex-lines { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
 .ex-lines li {
   display: flex;
@@ -817,7 +831,11 @@ input[type="checkbox"], input[type="radio"] {
   text-align: left;
   cursor: pointer;
 }
-button.cal-chip { align-items: flex-start; border-left: var(--space-1) solid var(--color-text); background: var(--color-surface-raised); }
+button.cal-chip { align-items: flex-start; border-left: var(--space-1) solid var(--color-accent); background: var(--color-surface-raised); }
+/* Sessions with the trainer: a dark card so they stand out on the page. */
+button.cal-chip.session { border-left-color: var(--color-accent); background: var(--color-session-bg); color: var(--color-session-text); }
+button.cal-chip.session span { color: var(--color-session-text); opacity: 0.8; }
+button.cal-chip.session:focus-visible { outline: var(--border-width-strong) solid var(--color-focus); outline-offset: var(--border-width-strong); }
 .cal-chip-main { align-items: flex-start; }
 .cal-chip b { font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
 .cal-chip span { color: var(--color-text-muted); font-size: var(--text-body-sm); }
@@ -825,6 +843,9 @@ button.cal-chip { align-items: flex-start; border-left: var(--space-1) solid var
 .cal-chip.done { border-left-color: var(--color-input-border); background: var(--color-surface); box-shadow: none; }
 .cal-chip.done b { color: var(--color-text-muted); }
 .cal-chip.missed { border-left-style: dashed; border-left-color: var(--color-input-border); }
+/* A cancelled session steps back down to a plain, struck-through card. */
+button.cal-chip.session.cancelled { border-left-color: var(--color-input-border); background: var(--color-surface); color: var(--color-text); }
+button.cal-chip.session.cancelled span { color: var(--color-text-muted); opacity: 1; }
 .cal-chip.session.cancelled b { text-decoration: line-through; color: var(--color-text-muted); }
 .cal-chip.movable { touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .cal-chip.dragging { opacity: 0.35; }

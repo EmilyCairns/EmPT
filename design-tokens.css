@@ -56,6 +56,8 @@
   --color-toast-bg: var(--color-ink);
   --color-toast-text: var(--color-parchment);
   --color-backdrop: rgb(42 43 47 / 0.45);          /* Ink-tinted dim behind dialogs */
+  --color-session-bg: var(--color-ink);            /* Sessions with the trainer stand out: a dark card… */
+  --color-session-text: var(--color-parchment);    /* …with light writing (13.5 : 1) */
 
   /* Plate calculator drawing: the standard gym plate colours, so clients
      recognise them. The ONLY place these colours may be used (see

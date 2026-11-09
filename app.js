@@ -1138,7 +1138,7 @@ async function renderClientHome(body) {
 
   // ---- Next session (when it isn't today) ----
   const nextSession = (state.sessions || []).find((x) => x.status === 'booked' && new Date(x.starts_at) > new Date() && x !== sessionToday);
-  const sessionCard_ = nextSession ? h('div', { class: 'callout' },
+  const sessionCard_ = nextSession ? h('div', { class: 'callout session-callout' },
     h('div', {}, h('p', { class: 'eyebrow' }, 'Next session'), h('p', {}, sessionLabel(nextSession) + (nextSession.location ? ` · ${nextSession.location}` : ''))),
     h('button', { class: 'btn small', onclick: () => goTab('calendar') }, 'View calendar')) : null;
 
