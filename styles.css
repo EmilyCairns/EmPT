@@ -607,7 +607,22 @@ input[type="checkbox"], input[type="radio"] {
 .plates .row-between { flex-wrap: wrap; }
 .plates .eyebrow { margin: 0; }
 .plates .chips { margin: 0; }
-.barbell-svg { display: block; width: 100%; max-width: var(--dialog-width); height: auto; margin: var(--space-3) auto 0; }
+/* Picture on the left, list of plates on the right (also on phones). */
+.plates-body {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  align-items: center;
+  gap: var(--space-4);
+  margin-top: var(--space-3);
+}
+.plates-body > .muted, .plates-body > .small { grid-column: 1 / -1; margin: 0; }
+.barbell-svg { display: block; width: 100%; height: auto; }
+.plates-caption { margin: var(--space-1) 0 0; color: var(--color-text-muted); font-size: var(--text-eyebrow); text-align: center; }
+.plates-total { margin: 0 0 var(--space-2); font-family: var(--font-display); font-size: var(--text-title); line-height: var(--leading-title); letter-spacing: normal; }
+.plates-list ul { display: flex; flex-direction: column; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.plates-list li { font-size: var(--text-body-sm); line-height: var(--leading-subheading); }
+.plates-list li:first-child { font-weight: var(--weight-semibold); }
+.plates-list .muted { margin: var(--space-2) 0 0; }
 .bar-shaft { fill: var(--bar-steel); }
 .bar-sleeve { fill: var(--bar-sleeve); }
 .bar-collar { fill: var(--color-ink); }
@@ -616,7 +631,7 @@ input[type="checkbox"], input[type="radio"] {
 .plate-rim { fill: none; stroke: var(--plate-outline); stroke-width: 1; opacity: 0.35; }
 .plate-label {
   font-family: var(--font-body);
-  font-size: var(--text-body-sm);
+  font-size: var(--text-eyebrow);
   font-weight: var(--weight-bold);
   letter-spacing: normal;
   font-variant-numeric: tabular-nums;
@@ -630,7 +645,6 @@ input[type="checkbox"], input[type="radio"] {
 .plate-5 { fill: var(--plate-5); }
 .plate-2-5 { fill: var(--plate-2-5); }
 .plate-1-25 { fill: var(--plate-1-25); }
-.plates-text { margin: var(--space-2) 0 0; text-align: center; }
 .history-row {
   display: flex;
   flex-wrap: wrap;

@@ -1254,53 +1254,71 @@ const svgEl = (tag, attrs = {}, ...kids) => {
   return el;
 };
 
-// Plate drawing sizes (SVG units): [height, thickness]. Bigger plates are
-// taller and thicker; every plate is wide enough to print its weight on.
-const PLATE_SHAPE = { 25: [116, 28], 20: [112, 26], 15: [100, 24], 10: [86, 22], 5: [66, 20], 2.5: [52, 19], 1.25: [44, 18] };
+// Real-world sizes in mm: [diameter, thickness]. Bumper plates from 10 to
+// 25 kg are all 450 mm across and differ in thickness; change plates
+// (5 kg and lighter) are much smaller.
+const PLATE_MM = { 25: [450, 60], 20: [450, 52], 15: [450, 42], 10: [450, 32], 5: [230, 26], 2.5: [190, 21], 1.25: [160, 16] };
+// Bars: shaft and sleeve diameter, loadable sleeve length (mm).
+const BAR_MM = { 20: { shaft: 28, sleeve: 50, sleeveLength: 415 }, 15: { shaft: 25, sleeve: 50, sleeveLength: 320 } };
 // Light writing on red, blue and green plates; dark writing on yellow,
 // white and silver ones.
 const DARK_PLATES = new Set([25, 20, 10, 2.5]);
+
+// Draws ONE side of the bar to scale: part of the shaft, the collar, then
+// the sleeve with the plates on it. (The other side is loaded the same.)
 function barbellPicture(plates, bar) {
-  const W = 360, H = 128, mid = H / 2, collarL = 148, collarR = W - 148, sleeveEnd = 6;
-  const shape = (p) => PLATE_SHAPE[p] || [Math.min(116, 40 + p * 3), 20];
-  // Squeeze plates a little if lots are needed, but keep the numbers readable.
-  const room = collarL - 4 - sleeveEnd - 4;
-  const totalThick = plates.reduce((a, p) => a + shape(p)[1] + 2, 0);
-  const squeeze = Math.max(0.6, Math.min(1, room / Math.max(totalThick, 1)));
+  const mm = 0.3;               // drawing units per mm
+  const thick = 0.45;           // plate thickness is exaggerated a little so the numbers fit
+  const minThick = 13;
+  const dims = BAR_MM[bar] || BAR_MM[20];
+  const shaftLen = 250 * mm, collarLen = 30 * mm, collarDia = 70 * mm;
+  const sleeveLen = dims.sleeveLength * mm;
+  const W = shaftLen + collarLen + BAR_MM[20].sleeveLength * mm + 4;
+  const H = 450 * mm + 12;
+  const mid = H / 2;
+  const sleeveStart = shaftLen + collarLen;
+  const shape = (p) => {
+    const [dia, t] = PLATE_MM[p] || [Math.min(450, 120 + p * 14), 20];
+    return [dia * mm, Math.max(t * thick, minThick)];
+  };
+  // Squeeze if a very heavy load would run off the sleeve.
+  const totalThick = plates.reduce((a, p) => a + shape(p)[1] + 1.5, 0);
+  const squeeze = Math.min(1, (sleeveLen - 4) / Math.max(totalThick, 1));
   const parts = [
-    svgEl('rect', { class: 'bar-sleeve', x: sleeveEnd, y: mid - 6, width: collarL - sleeveEnd, height: 12, rx: 3 }),
-    svgEl('rect', { class: 'bar-sleeve', x: collarR, y: mid - 6, width: W - sleeveEnd - collarR, height: 12, rx: 3 }),
-    svgEl('rect', { class: 'bar-shaft', x: collarL, y: mid - 3.5, width: collarR - collarL, height: 7, rx: 2 }),
-    svgEl('rect', { class: 'bar-collar', x: collarL - 5, y: mid - 11, width: 5, height: 22, rx: 1.5 }),
-    svgEl('rect', { class: 'bar-collar', x: collarR, y: mid - 11, width: 5, height: 22, rx: 1.5 }),
-    svgEl('text', { class: 'bar-label', x: W / 2, y: mid - 12, 'text-anchor': 'middle' }, `${bar} kg bar`),
+    svgEl('rect', { class: 'bar-shaft', x: 0, y: mid - (dims.shaft * mm) / 2, width: shaftLen, height: dims.shaft * mm }),
+    svgEl('rect', { class: 'bar-collar', x: shaftLen, y: mid - collarDia / 2, width: collarLen, height: collarDia, rx: 1.5 }),
+    svgEl('rect', { class: 'bar-sleeve', x: sleeveStart, y: mid - (dims.sleeve * mm) / 2, width: sleeveLen, height: dims.sleeve * mm, rx: 2 }),
+    svgEl('text', { class: 'bar-label', x: shaftLen / 2, y: mid - 10, 'text-anchor': 'middle' }, `${bar} kg bar`),
   ];
-  const plate = (p, x, t) => {
-    const [ph] = shape(p);
-    const cls = `plate plate-${String(p).replace('.', '-')}`;
+  // Heaviest plates go on first, next to the collar.
+  let x = sleeveStart + 1;
+  for (const p of plates) {
+    const [ph, pt] = shape(p);
+    const t = pt * squeeze;
     const cx = x + t / 2;
-    return [
-      svgEl('rect', { class: cls, x, y: mid - ph / 2, width: t, height: ph, rx: 3 }),
-      // A thin rim, like the edge of a bumper plate.
-      svgEl('rect', { class: 'plate-rim', x: x + 2, y: mid - ph / 2 + 2, width: t - 4, height: ph - 4, rx: 2 }),
+    const cls = `plate plate-${String(p).replace('.', '-')}`;
+    parts.push(
+      svgEl('rect', { class: cls, x, y: mid - ph / 2, width: t, height: ph, rx: 2.5 }),
+      svgEl('rect', { class: 'plate-rim', x: x + 2, y: mid - ph / 2 + 2, width: Math.max(t - 4, 1), height: ph - 4, rx: 2 }),
       svgEl('text', {
         class: `plate-label ${DARK_PLATES.has(p) ? 'on-dark' : 'on-light'}`,
         x: cx, y: mid, 'text-anchor': 'middle', 'dominant-baseline': 'central',
         transform: `rotate(-90 ${cx} ${mid})`,
       }, String(p)),
-    ];
-  };
-  // Heaviest plates go on first, next to the collar.
-  let left = collarL - 5;
-  let right = collarR + 5;
-  for (const p of plates) {
-    const t = shape(p)[1] * squeeze;
-    left -= t + 2;
-    parts.push(...plate(p, left, t));
-    parts.push(...plate(p, right + 2, t));
-    right += t + 2;
+    );
+    x += t + 1.5;
   }
-  return svgEl('svg', { viewBox: `0 0 ${W} ${H}`, class: 'barbell-svg', 'aria-hidden': 'true', focusable: 'false' }, parts);
+  return svgEl('svg', { viewBox: `0 0 ${W.toFixed(1)} ${H.toFixed(1)}`, class: 'barbell-svg', 'aria-hidden': 'true', focusable: 'false' }, parts);
+}
+
+// "20 kg bar", "2 × 25 kg plates each side", … heaviest first.
+function plateLines(plates, bar) {
+  const counts = new Map();
+  for (const p of plates) counts.set(p, (counts.get(p) || 0) + 1);
+  return [
+    `${bar} kg bar`,
+    ...[...counts].map(([p, n]) => `${n} × ${p} kg plate${n === 1 ? '' : 's'} each side`),
+  ];
 }
 
 // The plate calculator for one exercise. update(kg) redraws it.
@@ -1330,11 +1348,13 @@ function plateCalculator(signal) {
       fill(body, h('p', { class: 'small' }, `${kg(current)} is lighter than the ${bar} kg bar. Use a lighter bar or dumbbells.`));
       return;
     }
-    const each = r.plates.length ? r.plates.map((p) => `${p}`).join(' + ') + ' kg' : 'no plates';
     fill(body,
-      barbellPicture(r.plates, bar),
-      h('p', { class: 'plates-text' }, h('strong', {}, `${kg(current)}: `), `${bar} kg bar + ${each} on each side`),
-      r.exact ? null : h('p', { class: 'muted small' }, `Closest with standard plates: ${kg(r.loaded)}.`));
+      h('div', { class: 'plates-picture' }, barbellPicture(r.plates, bar), h('p', { class: 'plates-caption' }, 'One side shown')),
+      h('div', { class: 'plates-list' },
+        h('p', { class: 'plates-total' }, kg(r.exact ? current : r.loaded)),
+        h('ul', {}, plateLines(r.plates, bar).map((line) => h('li', {}, line))),
+        r.plates.length ? null : h('p', { class: 'muted small' }, 'Just the bar, no plates.'),
+        r.exact ? null : h('p', { class: 'muted small' }, `${kg(current)} can't be made exactly with standard plates, so this is the closest.`)));
   }
   document.addEventListener('empt-bar-change', () => update(current), { signal });
   return { el, update };
