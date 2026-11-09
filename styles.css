@@ -1133,3 +1133,71 @@ body.is-dragging { cursor: grabbing; -webkit-user-select: none; user-select: non
   .row-between.top { flex-direction: column; }
   .messages { height: 55vh; }
 }
+
+/* Team wins: the community feed. */
+.win {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-cards);
+  background: var(--color-surface-raised);
+}
+.win-avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--control-height-sm);
+  height: var(--control-height-sm);
+  border: var(--border-width-strong) solid var(--color-accent);
+  border-radius: var(--radius-pills);
+  background: var(--color-surface);
+  color: var(--color-accent-text);
+  font-family: var(--font-display);
+  font-size: var(--text-subheading);
+}
+/* Shout-outs from the trainer: a filled seal. */
+.win.shoutout .win-avatar { background: var(--color-accent); color: var(--color-on-accent); }
+.win-body { flex: 1; min-width: 0; }
+.win-body .eyebrow { margin: 0 0 var(--space-1); }
+.win-text { margin: 0; overflow-wrap: anywhere; }
+.win-foot { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
+.reactions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.react {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--control-height-sm);
+  padding: 0 var(--space-3);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-pills);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-body);
+  cursor: pointer;
+  transition: border-color var(--motion-fast), background var(--motion-fast);
+}
+.react b { font-size: var(--text-body-sm); font-variant-numeric: tabular-nums; }
+.react:hover:not(:disabled) { border-color: var(--color-accent); }
+.react[aria-pressed="true"] { border: var(--border-width-strong) solid var(--color-accent); color: var(--color-accent-text); }
+.react:disabled { cursor: default; }
+.react:focus-visible { outline: var(--border-width-strong) solid var(--color-focus); outline-offset: var(--border-width-strong); }
+.join-card p { margin: 0 0 var(--space-3); }
+.join-card .eyebrow { margin-bottom: var(--space-2); }
+.share-line { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-4); }
+.share-line p { margin: 0; }
+.wins-preview .row-between h3 { margin: 0; }
+.wins-preview .stack { margin-top: var(--space-3); }
+.share-nudge { margin: var(--space-3) 0 0; }
+button.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent-text);
+  font: inherit;
+  font-weight: var(--weight-semibold);
+  text-decoration: underline;
+  text-underline-offset: var(--space-1);
+  cursor: pointer;
+}
+button.link:focus-visible { outline: var(--border-width-strong) solid var(--color-focus); outline-offset: var(--border-width-strong); }

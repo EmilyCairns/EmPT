@@ -24,10 +24,11 @@ const state = {
   me: null,            // client row when a client is signed in
   clients: [],         // trainer: all clients
   selectedId: null,    // trainer: client being viewed
-  view: 'client',      // trainer: 'client', 'library', 'notices' or 'calendar'
+  view: 'client',      // trainer: 'client', 'library', 'notices', 'calendar' or 'community'
   library: [],         // exercise library (both roles)
   lifting: true,       // false until the database has the lifting tables
   notices: null,       // notice board posts; null until/unless the table exists
+  community: null,     // Team wins: client { member } / trainer { members }; null until the tables exist
   sessions: null,      // booked sessions; null until/unless the table exists
   cal: { month: null, day: null }, // calendar position (first of month, 'YYYY-MM-DD')
   activeWorkout: null, // client: id of the workout open in "Start workout" mode
@@ -244,7 +245,7 @@ async function route(session) {
   if (!me) return renderNotLinked();
   state.me = me;
   state.tab = 'home';
-  await Promise.all([loadLibrary(), loadNotices(), loadSessions(me.id), loadPrograms(me.id).then((p) => { state.myPrograms = p; })]);
+  await Promise.all([loadLibrary(), loadNotices(), loadSessions(me.id), loadPrograms(me.id).then((p) => { state.myPrograms = p; }), loadCommunity()]);
   renderClientApp();
 }
 
@@ -277,7 +278,7 @@ const payLabel = (clientId) => {
 };
 
 async function startTrainer() {
-  await Promise.all([loadClients(), loadLibrary(), loadNotices(), loadSessions()]);
+  await Promise.all([loadClients(), loadLibrary(), loadNotices(), loadSessions(), loadCommunity()]);
   // Hear about new client messages anywhere in the app.
   state.inboxChannel = sb.channel(`inbox-${Date.now()}`)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, ({ new: m }) => {
@@ -324,7 +325,8 @@ function renderClientList() {
   fill(ui.libNav,
     state.lifting ? navItem('library', 'Exercise library', `${state.library.length} exercise${state.library.length === 1 ? '' : 's'}`) : null,
     state.sessions ? navItem('calendar', 'Calendar', upcomingLabel(state.sessions)) : null,
-    state.notices ? navItem('notices', 'Notice board', `${state.notices.length} post${state.notices.length === 1 ? '' : 's'}`) : null);
+    state.notices ? navItem('notices', 'Notice board', `${state.notices.length} post${state.notices.length === 1 ? '' : 's'}`) : null,
+    state.community ? navItem('community', 'Team wins', `${state.community.members.size} sharing`) : null);
   ui.libNav.hidden = !ui.libNav.children.length;
   if (!state.clients.length) {
     ui.list.replaceChildren(h('p', { class: 'muted pad' }, 'No clients yet. Tap "+ New client" to start their consult notes.'));
@@ -389,6 +391,7 @@ function renderPanel() {
   if (state.view === 'library') return renderLibraryPanel();
   if (state.view === 'notices') return renderNoticesPanel();
   if (state.view === 'calendar') return renderCalendarPanel();
+  if (state.view === 'community') return renderCommunityPanel();
   const c = state.clients.find((x) => x.id === state.selectedId);
   if (!c) {
     ui.panel.replaceChildren(h('div', { class: 'empty' }, h('p', { class: 'muted' }, 'Choose a client to see their notes, workouts and chat.')));
@@ -919,7 +922,8 @@ function renderClientApp() {
       ['chat', 'Chat'],
     ].filter(Boolean), renderClientApp),
     body));
-  if (state.tab === 'home' || (state.tab === 'notices' && !state.notices)) renderClientHome(body);
+  if (state.tab === 'home' || (state.tab === 'notices' && !state.notices) || (state.tab === 'wins' && !state.community)) renderClientHome(body);
+  else if (state.tab === 'wins') renderClientWins(body);
   else if (state.tab === 'calendar') renderClientCalendar(body);
   else if (state.tab === 'program' || (state.tab === 'lifts' && !state.lifting)) renderClientProgramTab(body);
   else if (state.tab === 'lifts') renderLifts(body, state.me, { asTrainer: false });
@@ -1172,9 +1176,10 @@ function exerciseLines(w, limit = 4) {
 
 async function renderClientHome(body) {
   body.replaceChildren(h('p', { class: 'muted' }, 'Loading…'));
-  const [{ data, error }, excused] = await Promise.all([
-    sb.from('workouts').select('id,title,workout_date,exercises,completed_at,created_at').eq('client_id', state.me.id).eq('is_draft', false),
+  const [{ data, error }, excused, latestWins] = await Promise.all([
+    sb.from('workouts').select('id,title,workout_date,exercises,completed_at,created_at,program_id').eq('client_id', state.me.id).eq('is_draft', false),
     loadExcused(state.me.id),
+    state.community ? loadWins(2) : [],
     state.notices ? loadNotices() : null,
     state.sessions ? loadSessions(state.me.id) : null,
     state.myPrograms ? loadPrograms(state.me.id).then((p) => { state.myPrograms = p; }) : null,
@@ -1329,10 +1334,12 @@ async function renderClientHome(body) {
       workouts.length ? weekCard : null,
       sessionCard_,
       noticesBlock,
+      winsPreview(latestWins),
       consistency));
   // Bar heights as a share of the tallest week (set here, not inline in the markup).
   for (const el of body.querySelectorAll('[data-h]')) el.style.height = `${(Number(el.dataset.h) / maxBar) * 100}%`;
   if (thisWeek.hit) celebrateWeek(stats);
+  shareNewWins(workouts, stats);
 }
 
 // ---------------------------------------------------------------------------
@@ -1608,6 +1615,9 @@ async function recordNewBests(rows, maxes, clientId) {
     client_id: clientId, exercise_id: b.exercise_id, reps: b.reps, weight_kg: b.weight, tested_on: today(), source: 'logged',
   })));
   if (error) { toast(error.message, true); return []; }
+  for (const b of best.values()) {
+    postWin(clientId, 'pb', `pb:${b.exercise_id}:${b.reps}:${b.weight}`, `hit a new ${b.reps}RM: ${b.name || 'a lift'} ${b.weight} kg`);
+  }
   return [...best.values()];
 }
 
@@ -3133,6 +3143,237 @@ function openExerciseDialog(x) {
       renderClientList();
       renderPanel();
       toast(x ? 'Exercise updated' : `${row.name} added to the library`);
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Team wins: a community feed of clients' wins, for clients who opt in
+// ---------------------------------------------------------------------------
+
+const REACTIONS = ['🙌', '🔥', '💪', '👏'];
+const WIN_KINDS = { pb: 'Personal best', seal: 'Streak seal', program: 'Program finished', milestone: 'Milestone', shoutout: 'Shout-out' };
+const WORKOUT_MILESTONES = [10, 25, 50, 75, 100, 150, 200, 250, 300, 400, 500, 750, 1000];
+
+// Client: { member } (are they sharing?). Trainer: { members } (who is).
+// null when the database doesn't have the feed yet.
+async function loadCommunity() {
+  const { data, error } = await sb.from('community_members').select('client_id');
+  if (error) {
+    if (!isMissingTable(error)) toast(error.message, true);
+    state.community = null;
+    return;
+  }
+  state.community = state.isTrainer
+    ? { members: new Set(data.map((r) => r.client_id)) }
+    : { member: data.some((r) => r.client_id === state.me.id) };
+}
+
+// Newest wins first, each with its reactions.
+async function loadWins(limit = 60) {
+  const { data, error } = await sb.from('wins').select('*').order('created_at', { ascending: false }).limit(limit);
+  if (error) {
+    if (!isMissingTable(error)) toast(error.message, true);
+    return [];
+  }
+  const wins = data.sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit);
+  const ids = wins.map((w) => w.id);
+  const { data: reactions, error: rError } = ids.length
+    ? await sb.from('win_reactions').select('win_id,client_id,emoji').in('win_id', ids)
+    : { data: [] };
+  if (rError) toast(rError.message, true);
+  for (const w of wins) w.reactions = (reactions || []).filter((r) => r.win_id === w.id);
+  return wins;
+}
+
+// Posts a win for a client who is sharing. Quietly does nothing otherwise,
+// or if this win was already posted (the database rejects duplicate keys).
+async function postWin(clientId, kind, key, title) {
+  const c = state.community;
+  if (!c || (state.isTrainer ? !c.members.has(clientId) : !c.member)) return;
+  const name = firstName(state.isTrainer ? clientName(clientId) : state.me.full_name);
+  // display_name is replaced by the database with the client's real first name.
+  const { error } = await sb.from('wins').insert({ client_id: clientId, kind, key, title, display_name: name });
+  if (error && error.code !== '23505') toast(error.message, true);
+}
+
+// Client Home: post any new streak seal, workout milestone or finished
+// program. Only recent ones, so joining doesn't post a client's whole history.
+function shareNewWins(workouts, stats) {
+  if (!state.community?.member) return;
+  const since = addDays(today(), -14);
+  const doneDay = (w) => dayKey(new Date(w.completed_at));
+  if (stats.justSealed) {
+    postWin(state.me.id, 'seal', `seal:${stats.streak}`, `earned the ${stats.streak}-week seal: ${stats.streak} weeks in a row, every workout done`);
+  }
+  const done = workouts.filter((w) => w.completed_at).sort((a, b) => a.completed_at.localeCompare(b.completed_at));
+  const milestone = [...WORKOUT_MILESTONES].reverse().find((n) => done.length >= n);
+  if (milestone && doneDay(done[milestone - 1]) >= since) {
+    postWin(state.me.id, 'milestone', `workouts:${milestone}`, `has done ${milestone} workouts with ${TRAINER_NAME}`);
+  }
+  for (const p of state.myPrograms || []) {
+    if (p.status !== 'scheduled') continue;
+    const ws = workouts.filter((w) => w.program_id === p.id);
+    if (!ws.length || !ws.every((w) => w.completed_at)) continue;
+    if (ws.map(doneDay).sort().at(-1) < since) continue;
+    postWin(state.me.id, 'program', `program:${p.id}`, `finished the program "${p.title}": all ${plural(ws.length, 'workout')} done`);
+  }
+}
+
+function winCard(w, { onRemoved } = {}) {
+  const meId = state.isTrainer ? null : state.me.id;
+  const canReact = state.isTrainer || !!state.community?.member;
+  const isShout = w.kind === 'shoutout';
+  const name = isShout ? TRAINER_NAME : w.display_name || 'A teammate';
+  const isMine = (r) => (r.client_id ?? null) === meId;
+  const card = h('article', { class: 'win' + (isShout ? ' shoutout' : '') });
+
+  const toggle = async (emoji) => {
+    const had = w.reactions.find((r) => r.emoji === emoji && isMine(r));
+    // Show it straight away; put it back if the database says no.
+    w.reactions = had ? w.reactions.filter((r) => r !== had) : [...w.reactions, { win_id: w.id, client_id: meId, emoji }];
+    draw();
+    let q = sb.from('win_reactions');
+    if (had) {
+      q = q.delete().eq('win_id', w.id).eq('emoji', emoji);
+      q = meId ? q.eq('client_id', meId) : q.is('client_id', null);
+    } else {
+      q = q.insert({ win_id: w.id, client_id: meId, emoji });
+    }
+    const { error } = await q;
+    if (error && error.code !== '23505') {
+      toast(error.message, true);
+      w.reactions = had ? [...w.reactions, had] : w.reactions.filter((r) => !(r.emoji === emoji && isMine(r)));
+      draw();
+    }
+  };
+
+  const remove = async () => {
+    if (!confirm(state.isTrainer ? 'Remove this post from the feed for everyone?' : 'Remove this win from the feed?')) return;
+    const { error } = await sb.from('wins').delete().eq('id', w.id);
+    if (error) return toast(error.message, true);
+    toast('Removed from the feed.');
+    card.remove();
+    onRemoved?.();
+  };
+
+  function draw() {
+    fill(card,
+      h('div', { class: 'win-avatar', 'aria-hidden': 'true' }, name.charAt(0).toUpperCase()),
+      h('div', { class: 'win-body' },
+        h('p', { class: 'eyebrow' }, `${WIN_KINDS[w.kind] || 'Win'} · ${formatDateTime(w.created_at)}`),
+        h('p', { class: 'win-text' }, h('b', {}, name), isShout ? ': ' : ' ', w.title),
+        h('div', { class: 'win-foot' },
+          h('div', { class: 'reactions', role: 'group', 'aria-label': 'Reactions' }, REACTIONS.map((emoji) => {
+            const count = w.reactions.filter((r) => r.emoji === emoji).length;
+            const mine = w.reactions.some((r) => r.emoji === emoji && isMine(r));
+            return h('button', {
+              class: 'react',
+              type: 'button',
+              'aria-pressed': String(mine),
+              disabled: !canReact || null,
+              title: canReact ? (mine ? 'Remove your reaction' : 'React') : 'Share your wins to react',
+              'aria-label': `${emoji} ${count}${mine ? ', including you' : ''}`,
+              onclick: () => toggle(emoji),
+            }, h('span', { 'aria-hidden': 'true' }, emoji), count ? h('b', { 'aria-hidden': 'true' }, String(count)) : null);
+          })),
+          state.isTrainer || (meId && w.client_id === meId) ? h('button', { class: 'btn ghost small', onclick: remove }, 'Remove') : null)));
+  }
+  draw();
+  return card;
+}
+
+const SHARED_LIST = 'Your first name and your wins: personal bests (with the weight), streak seals, finished programs and workout milestones.';
+
+async function renderClientWins(body) {
+  body.replaceChildren(h('p', { class: 'muted' }, 'Loading…'));
+  const wins = await loadWins();
+  if (!body.isConnected) return;
+  const again = () => renderClientWins(body);
+  const setSharing = async (on) => {
+    const q = sb.from('community_members');
+    const { error } = on ? await q.insert({ client_id: state.me.id }) : await q.delete().eq('client_id', state.me.id);
+    if (error && error.code !== '23505') return toast(error.message, true);
+    state.community.member = on;
+    toast(on ? "You're in! Your next win will show up here." : 'You’ve stopped sharing. Your wins are hidden from the feed.');
+    again();
+  };
+  const name = firstName(state.me.full_name);
+  const shareBox = state.community.member
+    ? h('div', { class: 'share-line' },
+        h('p', { class: 'muted small' }, `You're sharing your wins as ${name}.`),
+        h('button', {
+          class: 'btn ghost small',
+          onclick: () => { if (confirm('Stop sharing your wins? They’ll be hidden from the feed. You can share again any time.')) setSharing(false); },
+        }, 'Stop sharing'))
+    : h('section', { class: 'card join-card' },
+        h('p', { class: 'eyebrow' }, 'Share your wins?'),
+        h('p', {}, `Cheer on ${TRAINER_NAME}'s other clients, and let them cheer you on. Sharing is optional.`),
+        h('p', { class: 'small' }, h('b', {}, 'What’s shared: '), SHARED_LIST),
+        h('p', { class: 'small' }, h('b', {}, 'Never shared: '), 'your notes, check-ins, body details, workouts or chats.'),
+        h('p', { class: 'muted small' }, 'You can stop any time, and your wins disappear from the feed.'),
+        h('button', { class: 'btn primary block', onclick: () => setSharing(true) }, 'Share my wins'));
+  fill(body,
+    h('button', { class: 'btn ghost small back-link', onclick: () => { state.tab = 'home'; renderClientApp(); } }, '← Home'),
+    h('h3', {}, 'Team wins'),
+    h('p', { class: 'muted small' }, `Personal bests, streaks and milestones from ${TRAINER_NAME}'s clients who choose to share.`),
+    shareBox,
+    wins.length
+      ? h('div', { class: 'stack' }, wins.map((w) => winCard(w)))
+      : h('div', { class: 'empty' }, h('p', { class: 'muted' }, 'No wins yet. They’ll appear here as people hit them.')));
+}
+
+// Home: the latest couple of wins, with "See all".
+function winsPreview(wins) {
+  if (!state.community) return null;
+  const goWins = () => { state.tab = 'wins'; renderClientApp(); };
+  return h('section', { class: 'wins-preview' },
+    h('div', { class: 'row-between' },
+      h('h3', {}, 'Team wins'),
+      h('button', { class: 'btn ghost small', onclick: goWins }, 'See all')),
+    wins.length
+      ? h('div', { class: 'stack' }, wins.map((w) => winCard(w)))
+      : h('p', { class: 'muted small' }, 'No wins posted yet.'),
+    state.community.member ? null : h('p', { class: 'muted small share-nudge' },
+      'Want to cheer each other on? ', h('button', { class: 'link', onclick: goWins }, 'Share your wins too')));
+}
+
+async function renderCommunityPanel() {
+  const refresh = () => { if (state.view === 'community') renderCommunityPanel(); };
+  ui.panel.replaceChildren(h('p', { class: 'muted pad' }, 'Loading…'));
+  const [wins] = await Promise.all([loadWins(), loadCommunity()]);
+  if (state.view !== 'community') return;
+  renderClientList();
+  const sharing = state.community ? [...state.community.members].map(clientName).sort() : [];
+  fill(ui.panel,
+    h('div', { class: 'panel-head' },
+      h('button', { class: 'btn ghost small back', onclick: () => { state.view = 'client'; renderClientList(); renderPanel(); } }, '← Clients'),
+      h('div', { class: 'panel-title' },
+        h('h2', {}, 'Team wins'),
+        h('p', { class: 'muted small' }, 'Clients who choose to share see each other’s personal bests, streak seals, finished programs and workout milestones, and can react. First names only.')),
+      h('button', { class: 'btn primary small', onclick: () => openShoutOut(refresh) }, '+ Shout-out')),
+    h('p', { class: 'muted small' }, sharing.length
+      ? `Sharing: ${sharing.join(', ')}`
+      : 'No clients are sharing yet. They can opt in from Team wins on their Home page.'),
+    wins.length
+      ? h('div', { class: 'stack' }, wins.map((w) => winCard(w)))
+      : h('div', { class: 'empty' }, h('p', { class: 'muted' }, 'No wins yet. Wins post automatically for clients who share, or post a shout-out.')));
+}
+
+function openShoutOut(onSaved) {
+  const text = h('textarea', { rows: '3', maxlength: '300', required: true, placeholder: 'Huge effort at Saturday’s bootcamp, everyone!' });
+  openDialog({
+    title: 'Shout-out',
+    fields: field('Message', text, 'Shown to all your clients in Team wins. Only use first names.'),
+    submitLabel: 'Post',
+    onSubmit: async () => {
+      const title = text.value.trim();
+      if (!title) return 'Write a message first.';
+      const { error } = await sb.from('wins').insert({ client_id: null, kind: 'shoutout', title });
+      if (error) return error.message;
+      toast('Shout-out posted.');
+      onSaved();
+      return null;
     },
   });
 }

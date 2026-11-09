@@ -212,6 +212,40 @@ create table if not exists public.excused_weeks (
   primary key (client_id, week_start)
 );
 
+-- Community: clients who have chosen to share their wins with other clients.
+-- No row means nothing of theirs appears in the feed.
+create table if not exists public.community_members (
+  client_id uuid primary key references public.clients (id) on delete cascade,
+  joined_at timestamptz not null default now()
+);
+
+-- The community feed: personal bests, streak seals, finished programs and
+-- workout milestones (posted by the app for sharing clients), plus the
+-- trainer's shout-outs (client_id null). display_name is the client's first
+-- name, filled in by the database. key stops the same win posting twice.
+create table if not exists public.wins (
+  id           uuid primary key default gen_random_uuid(),
+  client_id    uuid references public.clients (id) on delete cascade,
+  kind         text not null check (kind in ('pb', 'seal', 'program', 'milestone', 'shoutout')),
+  key          text check (char_length(key) <= 200),
+  title        text not null check (char_length(title) between 1 and 300),
+  display_name text not null default '',
+  created_at   timestamptz not null default now(),
+  unique (client_id, key),
+  check ((kind = 'shoutout') = (client_id is null))
+);
+create index if not exists wins_created_idx on public.wins (created_at desc);
+
+-- Reactions on wins. client_id null means the trainer reacted.
+create table if not exists public.win_reactions (
+  win_id     uuid not null references public.wins (id) on delete cascade,
+  client_id  uuid references public.clients (id) on delete cascade,
+  emoji      text not null check (emoji in ('🙌', '🔥', '💪', '👏')),
+  created_at timestamptz not null default now()
+);
+create unique index if not exists win_reactions_once
+  on public.win_reactions (win_id, coalesce(client_id, '00000000-0000-0000-0000-000000000000'::uuid), emoji);
+
 -- 2. Helper functions -------------------------------------------------
 
 -- Is the signed-in user the trainer?
@@ -431,6 +465,34 @@ create trigger client_notes_touch_updated_at
   before update on public.client_notes
   for each row execute function public.touch_updated_at();
 
+-- Is this client sharing their wins? Used by the feed's policies without
+-- letting clients read the community_members table itself.
+create or replace function public.shares_wins(p_client_id uuid)
+returns boolean
+language sql stable security definer set search_path = ''
+as $$
+  select exists (select 1 from public.community_members m where m.client_id = p_client_id);
+$$;
+
+-- Wins show the client's first name only. Set here so it can't be faked.
+create or replace function public.set_win_name()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  new.display_name := '';
+  if new.client_id is not null then
+    select coalesce(split_part(btrim(c.full_name), ' ', 1), '') into new.display_name
+      from public.clients c where c.id = new.client_id;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists wins_set_name on public.wins;
+create trigger wins_set_name
+  before insert or update on public.wins
+  for each row execute function public.set_win_name();
+
 -- 3. Invite-only sign-up ----------------------------------------------
 -- Only the trainer and clients you've added can create an account.
 create or replace function public.only_invited_signups()
@@ -466,6 +528,63 @@ alter table public.announcements enable row level security;
 alter table public.sessions enable row level security;
 alter table public.programs enable row level security;
 alter table public.excused_weeks enable row level security;
+alter table public.community_members enable row level security;
+alter table public.wins enable row level security;
+alter table public.win_reactions enable row level security;
+
+-- Community: a client joins or leaves themselves and sees only their own
+-- membership; the trainer sees who is sharing (and can remove someone).
+drop policy if exists "community_members: read own or trainer" on public.community_members;
+create policy "community_members: read own or trainer" on public.community_members
+  for select to authenticated
+  using (public.is_trainer() or client_id = public.my_client_id());
+drop policy if exists "community_members: join" on public.community_members;
+create policy "community_members: join" on public.community_members
+  for insert to authenticated
+  with check (client_id = public.my_client_id());
+drop policy if exists "community_members: leave" on public.community_members;
+create policy "community_members: leave" on public.community_members
+  for delete to authenticated
+  using (public.is_trainer() or client_id = public.my_client_id());
+
+-- Wins: current clients and the trainer see shout-outs and the wins of
+-- clients who are still sharing (leaving hides their past wins). Wins are
+-- only posted for sharing clients: by the client themselves or the trainer.
+-- Shout-outs come from the trainer. The client or the trainer can remove a win.
+drop policy if exists "wins: read" on public.wins;
+create policy "wins: read" on public.wins
+  for select to authenticated
+  using (public.is_trainer() or (public.my_client_id() is not null and (client_id is null or public.shares_wins(client_id))));
+drop policy if exists "wins: post" on public.wins;
+create policy "wins: post" on public.wins
+  for insert to authenticated
+  with check (
+    (kind = 'shoutout' and public.is_trainer())
+    or (kind <> 'shoutout' and public.shares_wins(client_id) and (public.is_trainer() or client_id = public.my_client_id()))
+  );
+drop policy if exists "wins: remove" on public.wins;
+create policy "wins: remove" on public.wins
+  for delete to authenticated
+  using (public.is_trainer() or client_id = public.my_client_id());
+
+-- Reactions: visible wherever the win is. Sharing clients react as
+-- themselves; the trainer reacts with client_id null.
+drop policy if exists "win_reactions: read" on public.win_reactions;
+create policy "win_reactions: read" on public.win_reactions
+  for select to authenticated
+  using (exists (select 1 from public.wins w where w.id = win_id));
+drop policy if exists "win_reactions: react" on public.win_reactions;
+create policy "win_reactions: react" on public.win_reactions
+  for insert to authenticated
+  with check (
+    exists (select 1 from public.wins w where w.id = win_id)
+    and ((client_id is null and public.is_trainer())
+      or (client_id = public.my_client_id() and public.shares_wins(client_id)))
+  );
+drop policy if exists "win_reactions: undo" on public.win_reactions;
+create policy "win_reactions: undo" on public.win_reactions
+  for delete to authenticated
+  using ((client_id is null and public.is_trainer()) or client_id = public.my_client_id());
 
 -- Rest weeks: the client sees their own; only the trainer writes.
 drop policy if exists "excused_weeks: read own or trainer" on public.excused_weeks;
@@ -623,7 +742,8 @@ create policy "messages: send as yourself" on public.messages
 -- 5. Permissions ------------------------------------------------------
 revoke all on public.trainers, public.clients, public.workouts, public.messages, public.client_notes,
   public.exercises, public.client_maxes, public.set_logs, public.workout_feedback, public.announcements,
-  public.sessions, public.programs, public.excused_weeks from anon, authenticated;
+  public.sessions, public.programs, public.excused_weeks, public.community_members, public.wins,
+  public.win_reactions from anon, authenticated;
 grant select, insert, update, delete on public.clients, public.workouts, public.client_notes,
   public.exercises, public.client_maxes to authenticated;
 grant select, insert, delete on public.set_logs to authenticated;
@@ -632,6 +752,10 @@ grant select, insert, update, delete on public.announcements to authenticated;
 grant select, insert, update, delete on public.sessions to authenticated;
 grant select, insert, update, delete on public.programs to authenticated;
 grant select, insert, delete on public.excused_weeks to authenticated;
+grant select, insert, delete on public.community_members, public.wins, public.win_reactions to authenticated;
+revoke execute on function public.shares_wins(uuid) from public, anon;
+grant execute on function public.shares_wins(uuid) to authenticated;
+revoke execute on function public.set_win_name() from public, anon, authenticated;
 grant select, insert on public.messages to authenticated;
 
 revoke execute on function public.schedule_program(uuid, int[], date) from public, anon;
