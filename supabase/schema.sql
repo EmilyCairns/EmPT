@@ -66,6 +66,36 @@ create index if not exists workouts_client_date_idx on public.workouts (client_i
 alter table public.workouts add column if not exists is_draft boolean not null default false;
 alter table public.workouts alter column is_draft set default true;
 
+-- Programs: a block of the same workouts every week (only loads change).
+-- The trainer writes one workout per training day (templates), then sends
+-- it to the client, who picks their training days and a start date;
+-- schedule_program() then creates the dated workouts.
+--   status: 'draft' (only the trainer sees it), 'offered' (waiting for the
+--   client to pick days), 'scheduled' (on the calendar).
+--   templates: [{ title, notes, exercises }], one per training day.
+--   training_days: ISO weekdays, 1 = Monday … 7 = Sunday.
+create table if not exists public.programs (
+  id            uuid primary key default gen_random_uuid(),
+  client_id     uuid not null references public.clients (id) on delete cascade,
+  title         text not null check (char_length(title) between 1 and 120),
+  notes         text not null default '' check (char_length(notes) <= 2000),
+  weeks         int not null default 4 check (weeks between 1 and 26),
+  days_per_week int not null default 3 check (days_per_week between 1 and 7),
+  templates     jsonb not null default '[]'::jsonb,
+  status        text not null default 'draft' check (status in ('draft', 'offered', 'scheduled')),
+  training_days int[],
+  start_date    date,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+create index if not exists programs_client_idx on public.programs (client_id);
+
+-- Which program (and week of it) a workout came from, and the day it was
+-- first planned for: clients can move a workout up to 14 days either side.
+alter table public.workouts add column if not exists program_id uuid references public.programs (id) on delete set null;
+alter table public.workouts add column if not exists program_week int;
+alter table public.workouts add column if not exists planned_date date;
+
 -- Exercise library: one row per exercise, with an optional demo video
 -- link and coaching cues. Clients can read it; only the trainer edits it.
 create table if not exists public.exercises (
@@ -256,6 +286,96 @@ begin
 end;
 $$;
 
+-- Puts a program on the calendar: one workout per picked weekday, from the
+-- start date, in order (A, B, C, A, B, C, …) until every week is filled.
+-- The client (for their own offered program) or the trainer can call it.
+create or replace function public.schedule_program(p_program_id uuid, p_days int[], p_start date)
+returns int
+language plpgsql security definer set search_path = ''
+as $$
+declare
+  pr public.programs;
+  by_trainer boolean := public.is_trainer();
+  days int[];
+  d date;
+  i int := 0;
+  total int;
+  t jsonb;
+begin
+  select * into pr from public.programs where id = p_program_id for update;
+  if not found or (not by_trainer and (pr.client_id is distinct from public.my_client_id() or pr.status = 'draft')) then
+    raise exception 'Program not found';
+  end if;
+  if pr.status = 'scheduled' then
+    raise exception 'This program is already on the calendar';
+  end if;
+  select array_agg(x order by x) into days from (select distinct unnest(p_days) as x) s where x between 1 and 7;
+  if coalesce(array_length(days, 1), 0) <> pr.days_per_week then
+    raise exception 'Pick exactly % days', pr.days_per_week;
+  end if;
+  if jsonb_array_length(pr.templates) <> pr.days_per_week then
+    raise exception 'This program isn''t finished yet';
+  end if;
+  if p_start is null or p_start < current_date - 1 or p_start > current_date + 90 then
+    raise exception 'Choose a start date from today onwards';
+  end if;
+
+  total := pr.weeks * pr.days_per_week;
+  d := p_start;
+  while i < total loop
+    if extract(isodow from d)::int = any (days) then
+      t := pr.templates -> (i % pr.days_per_week);
+      insert into public.workouts (client_id, title, workout_date, planned_date, notes, exercises, is_draft, program_id, program_week)
+      values (pr.client_id, coalesce(nullif(t ->> 'title', ''), 'Workout'), d, d, coalesce(t ->> 'notes', ''),
+              coalesce(t -> 'exercises', '[]'::jsonb), false, pr.id, i / pr.days_per_week + 1);
+      i := i + 1;
+    end if;
+    d := d + 1;
+  end loop;
+
+  update public.programs set status = 'scheduled', training_days = days, start_date = p_start where id = pr.id;
+  return total;
+end;
+$$;
+
+-- Moves a workout to another day. Clients can move their own published,
+-- unfinished workouts up to 14 days either side of the day first planned,
+-- and not into the past. The trainer can move any workout anywhere.
+create or replace function public.move_workout(p_workout_id uuid, p_date date)
+returns void
+language plpgsql security definer set search_path = ''
+as $$
+declare
+  w public.workouts;
+  by_trainer boolean := public.is_trainer();
+  anchor date;
+begin
+  select * into w from public.workouts where id = p_workout_id for update;
+  if not found or (not by_trainer and (w.client_id is distinct from public.my_client_id() or w.is_draft)) then
+    raise exception 'Workout not found';
+  end if;
+  if p_date is null then
+    raise exception 'Choose a day';
+  end if;
+  if not by_trainer then
+    if w.completed_at is not null then
+      raise exception 'This workout is already done';
+    end if;
+    anchor := coalesce(w.planned_date, w.workout_date, p_date);
+    if p_date < anchor - 14 or p_date > anchor + 14 then
+      raise exception 'Workouts can be moved up to 2 weeks either side of their planned day';
+    end if;
+    if p_date < current_date - 1 then
+      raise exception 'Choose a day from today onwards';
+    end if;
+  end if;
+  update public.workouts
+     set workout_date = p_date,
+         planned_date = coalesce(planned_date, workout_date, p_date)
+   where id = p_workout_id;
+end;
+$$;
+
 -- Keep workouts.updated_at current.
 create or replace function public.touch_updated_at()
 returns trigger
@@ -290,6 +410,11 @@ create trigger announcements_touch_updated_at
 drop trigger if exists sessions_touch_updated_at on public.sessions;
 create trigger sessions_touch_updated_at
   before update on public.sessions
+  for each row execute function public.touch_updated_at();
+
+drop trigger if exists programs_touch_updated_at on public.programs;
+create trigger programs_touch_updated_at
+  before update on public.programs
   for each row execute function public.touch_updated_at();
 
 drop trigger if exists client_notes_touch_updated_at on public.client_notes;
@@ -330,6 +455,18 @@ alter table public.set_logs enable row level security;
 alter table public.workout_feedback enable row level security;
 alter table public.announcements enable row level security;
 alter table public.sessions enable row level security;
+alter table public.programs enable row level security;
+
+-- Programs: the client sees their own once it's been sent to them; only the
+-- trainer writes (clients schedule through schedule_program()).
+drop policy if exists "programs: read own or trainer" on public.programs;
+create policy "programs: read own or trainer" on public.programs
+  for select to authenticated
+  using (public.is_trainer() or (client_id = public.my_client_id() and status <> 'draft'));
+drop policy if exists "programs: trainer writes" on public.programs;
+create policy "programs: trainer writes" on public.programs
+  for all to authenticated
+  using (public.is_trainer()) with check (public.is_trainer());
 
 -- Sessions: clients see their own (and cancel through cancel_session());
 -- only the trainer books, edits and deletes.
@@ -466,15 +603,20 @@ create policy "messages: send as yourself" on public.messages
 -- 5. Permissions ------------------------------------------------------
 revoke all on public.trainers, public.clients, public.workouts, public.messages, public.client_notes,
   public.exercises, public.client_maxes, public.set_logs, public.workout_feedback, public.announcements,
-  public.sessions from anon, authenticated;
+  public.sessions, public.programs from anon, authenticated;
 grant select, insert, update, delete on public.clients, public.workouts, public.client_notes,
   public.exercises, public.client_maxes to authenticated;
 grant select, insert, delete on public.set_logs to authenticated;
 grant select, insert, update, delete on public.workout_feedback to authenticated;
 grant select, insert, update, delete on public.announcements to authenticated;
 grant select, insert, update, delete on public.sessions to authenticated;
+grant select, insert, update, delete on public.programs to authenticated;
 grant select, insert on public.messages to authenticated;
 
+revoke execute on function public.schedule_program(uuid, int[], date) from public, anon;
+grant execute on function public.schedule_program(uuid, int[], date) to authenticated;
+revoke execute on function public.move_workout(uuid, date) from public, anon;
+grant execute on function public.move_workout(uuid, date) to authenticated;
 revoke execute on function public.set_workout_completed(uuid, boolean) from public, anon;
 revoke execute on function public.cancel_session(uuid, text, text) from public, anon;
 grant execute on function public.cancel_session(uuid, text, text) to authenticated;

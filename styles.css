@@ -600,6 +600,166 @@ input[type="checkbox"], input[type="radio"] {
 .bar.part { background: var(--color-input-border); }
 .bar.hit { background: var(--color-accent); }
 
+/* ---- Programs --------------------------------------------------------- */
+
+.program h4 { margin: 0 0 var(--space-1); }
+.program .eyebrow { margin-bottom: var(--space-1); }
+.program.draft { background: var(--color-surface); border: var(--border-width-strong) dashed var(--color-border); }
+.program-slots { display: flex; flex-direction: column; margin: var(--space-4) 0 0; padding: 0; list-style: none; }
+.program-slots li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: var(--border-width) solid var(--color-border);
+}
+.slot-letter {
+  display: grid;
+  place-items: center;
+  width: var(--space-8);
+  height: var(--space-8);
+  flex: none;
+  border-radius: var(--radius-pills);
+  background: var(--color-surface);
+  color: var(--color-accent-text);
+  font-weight: var(--weight-semibold);
+}
+.slot-name { flex: 1; min-width: 0; }
+.program-offer h2 { margin: 0 0 var(--space-1); font-size: var(--text-heading); line-height: var(--leading-heading); }
+.program-offer .btn.block { margin-top: var(--space-5); }
+.program-page h1 { margin-bottom: var(--space-2); }
+.program-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); margin: var(--space-6) 0; }
+.program-facts > div { display: flex; flex-direction: column; padding: var(--space-3) var(--space-4); border-radius: var(--radius-nav); background: var(--color-surface-raised); }
+.program-facts b { font-family: var(--font-display); font-size: var(--text-heading); font-weight: var(--weight-regular); line-height: var(--leading-tight); }
+.program-facts span { color: var(--color-text-muted); font-size: var(--text-eyebrow); }
+.pick-days { margin-top: var(--space-8); }
+.pick-days h2 { margin-bottom: var(--space-1); }
+.pick-days .btn.block { margin-top: var(--space-5); }
+.day-chips { margin: var(--space-4) 0 var(--space-2); }
+.day-chip { min-width: calc(var(--space-12) + var(--space-1)); justify-content: center; }
+.program-preview { margin: 0; font-weight: var(--weight-semibold); }
+.schedule-picker .field { margin: var(--space-4) 0 var(--space-3); }
+.date-chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(var(--space-16) + var(--space-2)), 1fr)); gap: var(--space-2); }
+.date-chip { display: flex; flex-direction: column; align-items: center; gap: 0; padding: var(--space-2); border-radius: var(--radius-nav); }
+.date-chip span { font-size: var(--text-eyebrow); font-weight: var(--weight-regular); }
+.date-chip.current { border-style: dashed; }
+.date-chip:disabled { opacity: 0.5; cursor: default; }
+
+/* ---- Client calendar (weeks of days, Runna-style) --------------------- */
+
+.cal-help { margin: 0 0 var(--space-2); }
+.cal-week {
+  margin-top: var(--space-6);
+  overflow: hidden;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-cards);
+  background: var(--color-surface);
+}
+.cal-week.current { border: var(--border-width-strong) solid var(--color-text); }
+.cal-week-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: var(--border-width) solid var(--color-border);
+}
+.cal-week-head h3 {
+  margin: 0;
+  color: var(--color-text);
+  font-family: var(--font-display);
+  font-size: var(--text-title);
+  font-weight: var(--weight-regular);
+  letter-spacing: normal;
+  text-transform: none;
+}
+.week-pill {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pills);
+  background: var(--color-text);
+  color: var(--color-bg);
+  font-size: var(--text-eyebrow);
+  font-weight: var(--weight-bold);
+  text-transform: uppercase;
+}
+.cal-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  min-height: calc(var(--space-16) + var(--space-2));
+  padding: var(--space-3) var(--space-5);
+  border-bottom: var(--border-width) solid var(--color-border);
+  transition: background-color var(--motion-fast);
+}
+.cal-row:last-child { border-bottom: 0; }
+.cal-row.past { background: var(--color-surface-raised); }
+.cal-date { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); width: var(--space-10); flex: none; }
+.cal-date span { color: var(--color-text-muted); font-size: var(--text-eyebrow); font-weight: var(--weight-semibold); text-transform: uppercase; }
+.cal-date b {
+  display: grid;
+  place-items: center;
+  width: var(--space-8);
+  height: var(--space-8);
+  border-radius: var(--radius-pills);
+  font-size: var(--text-body-lg);
+  font-weight: var(--weight-semibold);
+}
+.cal-row.today .cal-date span { color: var(--color-accent-text); }
+.cal-row.today .cal-date b { background: var(--color-accent); color: var(--color-on-accent); }
+.cal-items { display: flex; flex: 1; flex-direction: column; gap: var(--space-2); min-width: 0; padding-top: var(--space-1); }
+.cal-items.any-day { padding: var(--space-3) var(--space-5); }
+.cal-rest { padding-top: var(--space-2); color: var(--color-text-muted); }
+
+/* A workout or session on a day: a card with a coloured edge. */
+.cal-chip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  border: 0;
+  border-left: var(--space-1) solid var(--color-accent);
+  border-radius: var(--radius-nav);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+}
+.cal-chip-main, button.cal-chip {
+  appearance: none;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+button.cal-chip { align-items: flex-start; border-left: var(--space-1) solid var(--color-text); background: var(--color-surface-raised); }
+.cal-chip-main { align-items: flex-start; }
+.cal-chip b { font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
+.cal-chip span { color: var(--color-text-muted); font-size: var(--text-body-sm); }
+.cal-chip .cal-move { margin-right: var(--space-2); }
+.cal-chip.done { border-left-color: var(--color-input-border); background: var(--color-surface); box-shadow: none; }
+.cal-chip.done b { color: var(--color-text-muted); }
+.cal-chip.missed { border-left-style: dashed; border-left-color: var(--color-input-border); }
+.cal-chip.session.cancelled b { text-decoration: line-through; color: var(--color-text-muted); }
+.cal-chip.movable { touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.cal-chip.dragging { opacity: 0.35; }
+.drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 50;
+  pointer-events: none;
+  box-shadow: var(--shadow-xl);
+}
+body.is-dragging { cursor: grabbing; -webkit-user-select: none; user-select: none; }
+.cal-row.drop-ok { background: var(--color-surface-raised); box-shadow: inset 0 0 0 var(--border-width-strong) var(--color-accent); }
+.cal-row.drop-no { box-shadow: inset 0 0 0 var(--border-width-strong) var(--color-danger); }
+
 /* ---- Workout page ("Start workout") ----------------------------------- */
 
 /* Read out by screen readers, invisible on screen. */

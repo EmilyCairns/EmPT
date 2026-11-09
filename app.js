@@ -31,6 +31,8 @@ const state = {
   sessions: null,      // booked sessions; null until/unless the table exists
   cal: { month: null, day: null }, // calendar position (first of month, 'YYYY-MM-DD')
   activeWorkout: null, // client: id of the workout open in "Start workout" mode
+  activeProgram: null, // client: id of the program overview being shown
+  myPrograms: null,    // client: their programs (null when the database has none yet)
   tab: 'workouts',
   chatChannel: null,
   inboxChannel: null,
@@ -242,7 +244,7 @@ async function route(session) {
   if (!me) return renderNotLinked();
   state.me = me;
   state.tab = 'home';
-  await Promise.all([loadLibrary(), loadNotices(), loadSessions(me.id)]);
+  await Promise.all([loadLibrary(), loadNotices(), loadSessions(me.id), loadPrograms(me.id).then((p) => { state.myPrograms = p; })]);
   renderClientApp();
 }
 
@@ -568,14 +570,26 @@ async function renderTrainerWorkouts(body, c) {
   const refresh = () => renderTrainerWorkouts(body, c);
   const reminder = h('div');
   const publishAll = h('span');
+  const programsEl = h('div');
+  const newProgram = h('button', { class: 'btn', hidden: true, onclick: () => openProgramDialog(c, null, refresh) }, '+ New program');
   body.replaceChildren(
     reminder,
+    programsEl,
     h('div', { class: 'row-between' },
       h('h3', {}, 'Workouts'),
       h('div', { class: 'actions' },
         publishAll,
+        newProgram,
         h('button', { class: 'btn primary', onclick: () => openWorkoutEditor(c, null, refresh) }, '+ New workout'))),
     list);
+  // Programs (hidden until the database has them).
+  loadPrograms(c.id).then((programs) => {
+    if (!programs || !programsEl.isConnected) return;
+    newProgram.hidden = false;
+    if (programs.length) {
+      fill(programsEl, h('h3', {}, 'Programs'), h('div', { class: 'stack' }, programs.map((pr) => programCard(c, pr, refresh))));
+    }
+  });
   // A private reminder of injuries while planning (from the consult notes).
   sb.from('client_notes').select('injuries').eq('client_id', c.id).maybeSingle().then(({ data }) => {
     if (data?.injuries?.trim() && reminder.isConnected) reminder.replaceWith(goalsBox('Injuries and conditions · private', data.injuries.trim()));
@@ -634,7 +648,11 @@ async function renderTrainerWorkouts(body, c) {
 const blankExercise = () => ({ name: '', exercise_id: '', sets: '', reps: '', pct: '', rm: '1', load: '', rest: '', notes: '' });
 const RM_CHOICES = [1, 2, 3, 4, 5, 6, 8, 10];
 
-function openWorkoutEditor(client, workout, onSaved) {
+// opts.template = { label, onSave(payload) } edits a program's workout
+// template instead: no date and no publishing; onSave stores it and may
+// return an error message.
+function openWorkoutEditor(client, workout, onSaved, opts = {}) {
+  const tpl = opts.template;
   const isNew = !workout?.id;
   const title = h('input', { required: true, maxlength: '120', value: workout?.title || '', placeholder: 'e.g. Lower body strength' });
   const date = h('input', { type: 'date', value: workout ? (workout.workout_date || '') : today() });
@@ -675,13 +693,13 @@ function openWorkoutEditor(client, workout, onSaved) {
   drawRows();
 
   openDialog({
-    title: isNew ? `New workout for ${client.full_name}` : 'Edit workout',
+    title: tpl ? tpl.label : isNew ? `New workout for ${client.full_name}` : 'Edit workout',
     wide: true,
-    altSubmitLabel: 'Save as draft',
-    submitLabel: workout?.id && !workout.is_draft ? 'Save' : 'Publish',
+    altSubmitLabel: tpl ? null : 'Save as draft',
+    submitLabel: tpl ? 'Save workout' : workout?.id && !workout.is_draft ? 'Save' : 'Publish',
     fields: [
       field('Title', title),
-      field('Date', date, 'Leave empty for a workout they can do any time.'),
+      tpl ? null : field('Date', date, 'Leave empty for a workout they can do any time.'),
       field('Notes', notes),
       libraryDatalist(),
       h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Exercises'),
@@ -712,6 +730,12 @@ function openWorkoutEditor(client, workout, onSaved) {
         clean.rm = clean.pct ? clean.rm || '1' : '';
         return clean;
       });
+      if (tpl) {
+        const problem = await tpl.onSave({ title: title.value.trim(), notes: notes.value.trim(), exercises });
+        if (problem) return problem;
+        onSaved?.();
+        return;
+      }
       const payload = {
         client_id: client.id,
         title: title.value.trim(),
@@ -777,7 +801,7 @@ function workoutCard(w, { actions = [], onChange, trainerFor, maxes = [], logs =
   return h('article', { class: 'card workout' + (draft ? ' draft' : done ? ' done' : '') },
     h('div', { class: 'row-between top' },
       h('div', {},
-        h('p', { class: 'eyebrow' }, w.workout_date ? formatDate(w.workout_date) : 'Any day'),
+        h('p', { class: 'eyebrow' }, [w.workout_date ? formatDate(w.workout_date) : 'Any day', w.program_week ? `Week ${w.program_week}` : null].filter(Boolean).join(' · ')),
         h('h4', {}, w.title),
         draft ? h('span', { class: 'badge' }, `Draft · not visible to ${firstName(trainerFor?.full_name)}`) : null,
         !draft && done ? h('span', { class: 'badge' }, `✓ Done · ${formatDateTime(w.completed_at)}`) : null),
@@ -808,6 +832,8 @@ function workoutCard(w, { actions = [], onChange, trainerFor, maxes = [], logs =
 function renderClientApp() {
   closeChat();
   if (state.activeWorkout) return renderWorkoutPage();
+  if (state.activeProgram) return renderProgramPage();
+  if (state.tab === 'sessions') state.tab = 'calendar'; // sessions now live on the calendar
   const body = h('div', { class: 'tab-body' });
   mount(header(), h('main', { class: 'client-main' },
     h('h1', {}, 'Hi ', h('em', {}, firstName(state.me.full_name))),
@@ -815,16 +841,15 @@ function renderClientApp() {
       // Short labels so all five tabs fit on a phone. Notices live on Home
       // (with a "See all" link), so they don't need a tab of their own.
       ['home', ['Home', unseenNotices() ? h('span', { class: 'dot', title: 'New post' }) : null]],
+      ['calendar', 'Calendar'],
       ['workouts', 'Workouts'],
-      state.sessions ? ['sessions', 'Sessions'] : null,
       state.lifting ? ['lifts', 'Lifts'] : null,
       ['chat', 'Chat'],
     ].filter(Boolean), renderClientApp),
     body));
   if (state.tab === 'home' || (state.tab === 'notices' && !state.notices)) renderClientHome(body);
-  else if (state.tab === 'workouts' || (state.tab === 'lifts' && !state.lifting)
-    || (state.tab === 'sessions' && !state.sessions)) renderClientWorkouts(body);
-  else if (state.tab === 'sessions') renderSessions(body, { client: state.me, asTrainer: false });
+  else if (state.tab === 'calendar') renderClientCalendar(body);
+  else if (state.tab === 'workouts' || (state.tab === 'lifts' && !state.lifting)) renderClientWorkouts(body);
   else if (state.tab === 'lifts') renderLifts(body, state.me, { asTrainer: false });
   else if (state.tab === 'notices') renderClientNotices(body);
   else renderChat(body, state.me.id, 'client');
@@ -893,6 +918,7 @@ async function renderClientHome(body) {
     sb.from('workouts').select('id,title,workout_date,exercises,completed_at,created_at').eq('client_id', state.me.id).eq('is_draft', false),
     state.notices ? loadNotices() : null,
     state.sessions ? loadSessions(state.me.id) : null,
+    state.myPrograms ? loadPrograms(state.me.id).then((p) => { state.myPrograms = p; }) : null,
   ]);
   if (!body.isConnected) return;
   if (error) { body.replaceChildren(h('p', { class: 'error' }, error.message)); return; }
@@ -1016,7 +1042,15 @@ async function renderClientHome(body) {
   const nextSession = (state.sessions || []).find((x) => x.status === 'booked' && new Date(x.starts_at) > new Date() && x !== sessionToday);
   const sessionCard_ = nextSession ? h('div', { class: 'callout' },
     h('div', {}, h('p', { class: 'eyebrow' }, 'Next session'), h('p', {}, sessionLabel(nextSession) + (nextSession.location ? ` · ${nextSession.location}` : ''))),
-    h('button', { class: 'btn small', onclick: () => goTab('sessions') }, 'View sessions')) : null;
+    h('button', { class: 'btn small', onclick: () => goTab('calendar') }, 'View calendar')) : null;
+
+  // ---- A new program waiting for its days to be picked ----
+  const offered = (state.myPrograms || []).find((p) => p.status === 'offered');
+  const offerCard = offered ? h('section', { class: 'card program-offer' },
+    h('p', { class: 'eyebrow' }, `New program from ${TRAINER_NAME}`),
+    h('h2', {}, offered.title),
+    h('p', { class: 'muted small' }, `${offered.weeks} week${offered.weeks === 1 ? '' : 's'} · ${offered.days_per_week} workout${offered.days_per_week === 1 ? '' : 's'} a week`),
+    h('button', { class: 'btn primary block', onclick: () => { state.activeProgram = offered.id; renderClientApp(); } }, 'See it and pick your days →')) : null;
 
   // ---- From the trainer: pinned first, newest next ----
   const posts = (state.notices || []).slice(0, 2);
@@ -1045,6 +1079,7 @@ async function renderClientHome(body) {
   fill(body,
     h('div', { class: 'stack home' },
       state.me.goals ? goalsBox('Your goals', state.me.goals) : null,
+      offerCard,
       todayCard,
       workouts.length ? weekCard : null,
       sessionCard_,
@@ -1717,7 +1752,7 @@ async function renderWorkoutPage() {
   mount(header(), h('main', { class: 'client-main workout-page' },
     timer.el,
     h('button', { class: 'btn ghost small back-link', onclick: leave }, '← Back to workouts'),
-    h('p', { class: 'eyebrow' }, w.workout_date ? formatDate(w.workout_date) : 'Any day'),
+    h('p', { class: 'eyebrow' }, [w.workout_date ? formatDate(w.workout_date) : 'Any day', w.program_week ? `Week ${w.program_week}` : null].filter(Boolean).join(' · ')),
     h('h1', {}, w.title),
     w.notes ? h('p', { class: 'lead' }, w.notes) : null,
     h('p', { class: 'muted small' }, 'Enter what you lift as you go, and tap ✓ when a set is done: it starts your rest timer. Grey numbers are the plan. Effort is how hard it felt out of 10.'),
@@ -2113,6 +2148,510 @@ function renderCalendarPanel() {
         h('p', { class: 'muted small' }, 'All booked sessions. Clients can cancel their own; you get a message in their chat when they do.'))),
     body);
   renderSessions(body, { client: null, asTrainer: true });
+}
+
+// ---------------------------------------------------------------------------
+// Programs: a block of the same workouts each week (only loads change)
+// ---------------------------------------------------------------------------
+
+const WEEKDAYS = [[1, 'Mon'], [2, 'Tue'], [3, 'Wed'], [4, 'Thu'], [5, 'Fri'], [6, 'Sat'], [7, 'Sun']];
+const isoDow = (key) => ((dateOf(key).getDay() + 6) % 7) + 1;
+const letter = (i) => String.fromCharCode(65 + i); // A, B, C…
+const daysText = (days) => (days || []).map((d) => WEEKDAYS[d - 1]?.[1]).filter(Boolean).join(', ');
+
+// null when the database doesn't have programs yet (the features stay hidden).
+async function loadPrograms(clientId) {
+  const { data, error } = await sb.from('programs').select('*').eq('client_id', clientId).order('created_at', { ascending: false });
+  if (error) {
+    if (!isMissingTable(error)) toast(error.message, true);
+    return null;
+  }
+  return data;
+}
+
+// The dates schedule_program() will use: the picked weekdays from the start
+// date onwards, in order, until every workout has a day.
+function previewSchedule(days, start, count) {
+  const out = [];
+  let k = start;
+  for (let guard = 0; out.length < count && guard < 400; guard++) {
+    if (days.includes(isoDow(k))) out.push(k);
+    k = addDays(k, 1);
+  }
+  return out;
+}
+
+// Seven day toggles; exactly `need` of them can be on.
+function dayPicker(need, initial = []) {
+  const chosen = new Set(initial);
+  const listeners = [];
+  const count = h('p', { class: 'muted small', 'aria-live': 'polite' });
+  const update = () => {
+    count.textContent = chosen.size === need ? `${need} of ${need} picked.` : `${chosen.size} of ${need} picked. Pick ${need - chosen.size} more.`;
+    listeners.forEach((f) => f());
+  };
+  const buttons = WEEKDAYS.map(([n, label]) => {
+    const b = h('button', {
+      type: 'button',
+      class: 'chip-toggle day-chip',
+      'aria-pressed': String(chosen.has(n)),
+      onclick: () => {
+        if (chosen.has(n)) chosen.delete(n);
+        else if (chosen.size < need) chosen.add(n);
+        else return toast(`That's ${need} days already. Untick one to swap it.`);
+        b.setAttribute('aria-pressed', String(chosen.has(n)));
+        update();
+      },
+    }, label);
+    return b;
+  });
+  update();
+  return {
+    el: h('div', {}, h('div', { class: 'chips day-chips', role: 'group', 'aria-label': 'Training days' }, buttons), count),
+    days: () => [...chosen].sort((a, b) => a - b),
+    onChange: (f) => listeners.push(f),
+  };
+}
+
+// Day picker + start date + a sentence previewing the plan.
+function schedulePicker(pr) {
+  const n = pr.days_per_week;
+  const total = pr.weeks * n;
+  const picker = dayPicker(n, pr.training_days || []);
+  const start = h('input', { type: 'date', value: today(), min: today(), required: true });
+  const preview = h('p', { class: 'program-preview', 'aria-live': 'polite' });
+  const ready = () => picker.days().length === n && !!start.value;
+  const refresh = () => {
+    if (!ready()) { preview.textContent = `Pick ${n} day${n === 1 ? '' : 's'} to see the plan.`; return; }
+    const dates = previewSchedule(picker.days(), start.value, total);
+    const first = pr.templates?.[0]?.title || 'Workout A';
+    preview.textContent = `First workout: ${first} on ${shortDay(dates[0])}. Last of ${total}: ${shortDay(dates.at(-1))}.`;
+  };
+  picker.onChange(refresh);
+  start.addEventListener('input', refresh);
+  refresh();
+  return {
+    el: h('div', { class: 'schedule-picker' }, picker.el, field('Start on', start), preview),
+    ready,
+    onChange: (f) => { picker.onChange(f); start.addEventListener('input', f); },
+    schedule: () => sb.rpc('schedule_program', { p_program_id: pr.id, p_days: picker.days(), p_start: start.value }),
+  };
+}
+
+const templatesDone = (pr) => (pr.templates || []).length === pr.days_per_week && pr.templates.every((t) => t && t.title);
+
+// Trainer: one program, with its workout slots and actions.
+function programCard(c, pr, refresh) {
+  const n = pr.days_per_week;
+  const who = firstName(c.full_name);
+  const ready = templatesDone(pr);
+  const status = {
+    draft: `Draft · not visible to ${who}`,
+    offered: `Sent · waiting for ${who} to pick days`,
+    scheduled: `On the calendar · ${daysText(pr.training_days)} from ${pr.start_date ? shortDay(pr.start_date) : ''}`,
+  }[pr.status];
+  const editTemplate = (i) => {
+    const t = pr.templates?.[i];
+    openWorkoutEditor(c, t ? { title: t.title, notes: t.notes, exercises: t.exercises } : null, refresh, {
+      template: {
+        label: `${pr.title}: workout ${letter(i)}`,
+        onSave: async (payload) => {
+          const templates = Array.from({ length: n }, (_, k) => pr.templates?.[k] || null);
+          templates[i] = payload;
+          const { error } = await sb.from('programs').update({ templates }).eq('id', pr.id);
+          if (error) return error.message;
+          toast(`Workout ${letter(i)} saved.`);
+          return null;
+        },
+      },
+    });
+  };
+  const slots = h('ol', { class: 'program-slots' }, Array.from({ length: n }, (_, i) => {
+    const t = pr.templates?.[i];
+    return h('li', {},
+      h('span', { class: 'slot-letter', 'aria-hidden': 'true' }, letter(i)),
+      h('span', { class: 'slot-name' }, t?.title || h('span', { class: 'muted' }, 'Not written yet'),
+        t ? h('span', { class: 'muted small' }, ` · ${t.exercises?.length || 0} exercise${t.exercises?.length === 1 ? '' : 's'}`) : null),
+      pr.status === 'scheduled' ? null : h('button', { class: 'btn ghost small', onclick: () => editTemplate(i) }, t ? 'Edit' : 'Write'));
+  }));
+  const actions = [
+    ['Edit details', () => openProgramDialog(c, pr, refresh)],
+    pr.status === 'draft' && ready && c.email ? [`Send to ${who}`, async () => {
+      if (!confirm(`Send "${pr.title}" to ${who}? They'll be asked to pick their training days.`)) return;
+      const { error } = await sb.from('programs').update({ status: 'offered' }).eq('id', pr.id);
+      if (error) return toast(error.message, true);
+      toast(`Sent. ${who} will see it on their Home page.`);
+      refresh();
+    }, 'primary small'] : null,
+    pr.status !== 'scheduled' && ready ? ['Choose days for them', () => openScheduleDialog(c, pr, refresh)] : null,
+    ['Delete', async () => {
+      if (!confirm(`Delete "${pr.title}"? Its upcoming workouts that haven't been done are deleted too. Finished ones stay in their history.`)) return;
+      const { error: wErr } = await sb.from('workouts').delete().eq('program_id', pr.id).is('completed_at', null);
+      if (wErr) return toast(wErr.message, true);
+      const { error } = await sb.from('programs').delete().eq('id', pr.id);
+      if (error) return toast(error.message, true);
+      toast('Program deleted');
+      refresh();
+    }, 'ghost small danger-text'],
+  ].filter(Boolean);
+  return h('article', { class: 'card program' + (pr.status === 'draft' ? ' draft' : '') },
+    h('p', { class: 'eyebrow' }, status),
+    h('h4', {}, pr.title),
+    h('p', { class: 'muted small' }, `${pr.weeks} week${pr.weeks === 1 ? '' : 's'} · ${n} workout${n === 1 ? '' : 's'} a week · the same workouts each week`),
+    pr.notes ? h('p', { class: 'notice-body' }, pr.notes) : null,
+    slots,
+    pr.status === 'scheduled'
+      ? h('p', { class: 'muted small' }, `To change weights for a particular week, edit that week's workouts below (they're labelled Week 1, Week 2…).`)
+      : !ready ? h('p', { class: 'muted small' }, `Write all ${n} workouts, then send it to ${who}.`)
+        : !c.email && pr.status === 'draft' ? h('p', { class: 'muted small' }, `${who} has no account yet: add their email to send it, or choose days for them.`) : null,
+    h('div', { class: 'row-end actions' }, actions.map(([label, fn, cls]) => h('button', { class: `btn ${cls || 'ghost small'}`, onclick: fn }, label))));
+}
+
+function openProgramDialog(c, pr, refresh) {
+  const scheduled = pr?.status === 'scheduled';
+  const title = h('input', { required: true, maxlength: '120', value: pr?.title || '', placeholder: 'e.g. Strength block 1' });
+  const notes = h('textarea', { rows: '3', maxlength: '2000', value: pr?.notes || '', placeholder: 'What this block is for, how it should feel…' });
+  const weeks = h('select', { disabled: scheduled || null }, Array.from({ length: 16 }, (_, i) => i + 1)
+    .map((w) => h('option', { value: String(w), selected: (pr?.weeks ?? 4) === w || null }, `${w} week${w === 1 ? '' : 's'}`)));
+  const perWeek = h('select', { disabled: scheduled || null }, [1, 2, 3, 4, 5, 6, 7]
+    .map((d) => h('option', { value: String(d), selected: (pr?.days_per_week ?? 3) === d || null }, `${d} workout${d === 1 ? '' : 's'} a week`)));
+  openDialog({
+    title: pr ? 'Edit program' : `New program for ${c.full_name}`,
+    submitLabel: pr ? 'Save' : 'Create',
+    fields: [
+      field('Name', title),
+      field('Note for the client (optional)', notes),
+      h('div', { class: 'two-col' }, field('Length', weeks), field('Workouts per week', perWeek)),
+      scheduled
+        ? h('p', { class: 'muted small' }, 'This program is already on the calendar, so its length can no longer change.')
+        : h('p', { class: 'muted small' }, 'Next you write one workout for each training day. The client does the same workouts every week; you can change the weights for any week later.'),
+    ],
+    onSubmit: async () => {
+      const row = { title: title.value.trim(), notes: notes.value.trim() };
+      if (!scheduled) {
+        row.weeks = Number(weeks.value);
+        row.days_per_week = Number(perWeek.value);
+        if (pr) row.templates = (pr.templates || []).slice(0, row.days_per_week);
+      }
+      const { error } = pr
+        ? await sb.from('programs').update(row).eq('id', pr.id)
+        : await sb.from('programs').insert({ ...row, client_id: c.id, status: 'draft', templates: [] });
+      if (error) return error.message;
+      toast(pr ? 'Program updated' : 'Program created. Now write its workouts.');
+      refresh();
+    },
+  });
+}
+
+// Trainer: pick the days on the client's behalf.
+function openScheduleDialog(c, pr, refresh) {
+  const sp = schedulePicker(pr);
+  openDialog({
+    title: `Choose ${firstName(c.full_name)}'s training days`,
+    submitLabel: 'Add to calendar',
+    fields: [h('p', { class: 'muted small' }, `${pr.title}: pick ${pr.days_per_week} day${pr.days_per_week === 1 ? '' : 's'} a week.`), sp.el],
+    onSubmit: async () => {
+      if (!sp.ready()) return `Pick ${pr.days_per_week} days first.`;
+      const { error } = await sp.schedule();
+      if (error) return error.message;
+      toast(`${pr.title} is on ${firstName(c.full_name)}'s calendar.`);
+      refresh();
+    },
+  });
+}
+
+// Client: the overview of a program, and picking training days.
+async function renderProgramPage() {
+  const id = state.activeProgram;
+  mount(header(), h('main', { class: 'client-main program-page' }, h('p', { class: 'muted' }, 'Loading…')));
+  state.myPrograms = await loadPrograms(state.me.id);
+  if (state.activeProgram !== id) return;
+  const pr = state.myPrograms?.find((p) => p.id === id);
+  const leave = () => { state.activeProgram = null; renderClientApp(); };
+  if (!pr) { toast('That program is no longer available.', true); return leave(); }
+  const n = pr.days_per_week;
+  const total = pr.weeks * n;
+  let action;
+  if (pr.status === 'scheduled') {
+    action = h('section', { class: 'card' },
+      h('p', { class: 'eyebrow' }, 'On your calendar'),
+      h('p', {}, `${daysText(pr.training_days)}, starting ${pr.start_date ? shortDay(pr.start_date) : ''}.`),
+      h('button', { class: 'btn primary block', onclick: () => { state.activeProgram = null; state.tab = 'calendar'; renderClientApp(); } }, 'Open my calendar →'));
+  } else {
+    const sp = schedulePicker(pr);
+    const add = h('button', { class: 'btn primary block', disabled: true }, 'Add to my calendar');
+    sp.onChange(() => { add.disabled = !sp.ready(); });
+    add.disabled = !sp.ready();
+    add.addEventListener('click', async () => {
+      add.disabled = true;
+      const { error } = await sp.schedule();
+      if (error) { add.disabled = false; return toast(error.message, true); }
+      toast(`${pr.title} is on your calendar.`);
+      state.activeProgram = null;
+      state.tab = 'calendar';
+      renderClientApp();
+    });
+    action = h('section', { class: 'card pick-days' },
+      h('h2', {}, 'Pick your training days'),
+      h('p', { class: 'muted small' }, `Choose ${n} day${n === 1 ? '' : 's'} that suit your week. If something comes up, you can move a single workout later.`),
+      sp.el,
+      add);
+  }
+  mount(header(), h('main', { class: 'client-main program-page' },
+    h('button', { class: 'btn ghost small back-link', onclick: leave }, '← Home'),
+    h('p', { class: 'eyebrow' }, pr.status === 'scheduled' ? 'Your program' : `New program from ${TRAINER_NAME}`),
+    h('h1', {}, pr.title),
+    pr.notes ? h('p', { class: 'lead' }, pr.notes) : null,
+    h('div', { class: 'program-facts' },
+      h('div', {}, h('b', {}, String(pr.weeks)), h('span', {}, `week${pr.weeks === 1 ? '' : 's'}`)),
+      h('div', {}, h('b', {}, String(n)), h('span', {}, 'a week')),
+      h('div', {}, h('b', {}, String(total)), h('span', {}, 'workouts'))),
+    h('h3', {}, 'The workouts'),
+    h('p', { class: 'muted small' }, 'You do the same workouts every week. The weights go up as you get stronger.'),
+    h('div', { class: 'stack' }, (pr.templates || []).map((t, i) => t && h('article', { class: 'card' },
+      h('p', { class: 'eyebrow' }, `Workout ${letter(i)}`),
+      h('h4', {}, t.title),
+      t.notes ? h('p', { class: 'notice-body' }, t.notes) : null,
+      exerciseLines(t, 8)))),
+    action));
+}
+
+// ---------------------------------------------------------------------------
+// Client: Calendar (weeks of workouts and sessions; move workouts)
+// ---------------------------------------------------------------------------
+
+const MOVE_DAYS = 14;
+const workoutAnchor = (w) => w.planned_date || w.workout_date;
+// Days a client may move a workout to: within 14 days of its planned day,
+// from today onwards (the database checks the same rule).
+function canMoveTo(w, key) {
+  const anchor = workoutAnchor(w);
+  if (!anchor) return key >= today();
+  return key >= today() && key >= addDays(anchor, -MOVE_DAYS) && key <= addDays(anchor, MOVE_DAYS);
+}
+
+async function moveWorkout(w, key, onDone) {
+  if (key === w.workout_date) return;
+  const { error } = await sb.rpc('move_workout', { p_workout_id: w.id, p_date: key });
+  if (error) return toast(error.message, true);
+  toast(`${w.title} moved to ${shortDay(key)}.`);
+  onDone();
+}
+
+function openMoveDialog(w, onDone) {
+  const anchor = workoutAnchor(w) || today();
+  let from = addDays(anchor, -MOVE_DAYS);
+  if (from < today()) from = today();
+  const to = addDays(anchor, MOVE_DAYS);
+  let chosen = null;
+  const chips = [];
+  for (let k = from; k <= to; k = addDays(k, 1)) {
+    const key = k;
+    const b = h('button', {
+      type: 'button',
+      class: 'chip-toggle date-chip' + (key === w.workout_date ? ' current' : ''),
+      'aria-pressed': 'false',
+      disabled: key === w.workout_date || null,
+      onclick: () => { chosen = key; chips.forEach((c) => c.setAttribute('aria-pressed', String(c === b))); },
+    }, h('span', {}, dateOf(key).toLocaleDateString(undefined, { weekday: 'short' })), h('b', {}, dateOf(key).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })));
+    chips.push(b);
+  }
+  openDialog({
+    title: `Move ${w.title}`,
+    submitLabel: 'Move',
+    fields: [
+      h('p', { class: 'muted small' }, `Now on ${w.workout_date ? shortDay(w.workout_date) : 'no set day'}. You can move it up to 2 weeks either side of its planned day.`),
+      h('div', { class: 'date-chips', role: 'group', 'aria-label': 'New day' }, chips),
+    ],
+    onSubmit: async () => {
+      if (!chosen) return 'Pick a new day.';
+      const { error } = await sb.rpc('move_workout', { p_workout_id: w.id, p_date: chosen });
+      if (error) return error.message;
+      toast(`${w.title} moved to ${shortDay(chosen)}.`);
+      onDone();
+    },
+  });
+}
+
+function openSessionDetails(x, onDone) {
+  const cancellable = x.status === 'booked' && new Date(x.starts_at) > new Date();
+  openDialog({
+    title: `Session with ${TRAINER_NAME}`,
+    submitLabel: cancellable ? 'Cancel session' : 'OK',
+    cancelLabel: 'Close',
+    danger: cancellable,
+    fields: [sessionCard(x)],
+    onSubmit: async () => {
+      if (cancellable) setTimeout(() => openCancelDialog(x, { asTrainer: false, onDone }), 0);
+    },
+  });
+}
+
+async function renderClientCalendar(body, extraWeeksBefore = 0) {
+  body.replaceChildren(h('p', { class: 'muted' }, 'Loading…'));
+  const [{ data, error }] = await Promise.all([
+    sb.from('workouts').select('*').eq('client_id', state.me.id).eq('is_draft', false),
+    state.sessions ? loadSessions(state.me.id) : null,
+  ]);
+  if (!body.isConnected) return;
+  if (error) { body.replaceChildren(h('p', { class: 'error' }, error.message)); return; }
+  const refresh = () => renderClientCalendar(body, extraWeeksBefore);
+  const workouts = data;
+  const sessions = state.sessions || [];
+  const todayK = today();
+  const thisMon = mondayKey(todayK);
+  const canMove = state.myPrograms !== null; // move_workout arrives with programs
+  // From this week (plus any earlier weeks asked for) to the last planned day, at least 4 weeks.
+  const lastKey = [...workouts.map((w) => w.workout_date), ...sessions.map((x) => dayKey(new Date(x.starts_at)))].filter(Boolean).sort().at(-1);
+  let endMon = addDays(thisMon, 21);
+  if (lastKey && mondayKey(lastKey) > endMon) endMon = mondayKey(lastKey);
+  const startMon = addDays(thisMon, -7 * extraWeeksBefore);
+  const weekStarts = [];
+  for (let m = startMon; m <= endMon && weekStarts.length < 60; m = addDays(m, 7)) weekStarts.push(m);
+  const undated = workouts.filter((w) => !w.workout_date && !w.completed_at);
+
+  const workoutChip = (w) => {
+    const done = !!w.completed_at;
+    const missed = !done && w.workout_date < todayK;
+    const movable = canMove && !done;
+    const n = (w.exercises || []).length;
+    const meta = [`${n} exercise${n === 1 ? '' : 's'}`, w.program_week ? `Week ${w.program_week}` : null, done ? '✓ Done' : missed ? 'Missed' : null].filter(Boolean).join(' · ');
+    return h('div', { class: 'cal-chip workout' + (done ? ' done' : '') + (missed ? ' missed' : '') + (movable ? ' movable' : ''), 'data-id': w.id },
+      h('button', { class: 'cal-chip-main', onclick: () => { state.activeWorkout = w.id; renderClientApp(); } },
+        h('b', {}, w.title), h('span', {}, meta)),
+      movable ? h('button', { class: 'btn ghost small cal-move', 'aria-label': `Move ${w.title} to another day`, onclick: () => openMoveDialog(w, refresh) }, 'Move') : null);
+  };
+  const sessionChip = (x) => h('button', { class: 'cal-chip session' + (x.status === 'cancelled' ? ' cancelled' : ''), onclick: () => openSessionDetails(x, refresh) },
+    h('b', {}, `Session with ${TRAINER_NAME}`),
+    h('span', {}, [timeText(new Date(x.starts_at)), x.location, x.status === 'cancelled' ? 'Cancelled' : null].filter(Boolean).join(' · ')));
+
+  const weekEls = weekStarts.map((mon) => {
+    const keys = Array.from({ length: 7 }, (_, i) => addDays(mon, i));
+    const inWeek = workouts.filter((w) => w.workout_date && w.workout_date >= mon && w.workout_date <= keys[6]);
+    const pweeks = inWeek.map((w) => w.program_week).filter(Boolean);
+    const pweek = pweeks.length ? Math.max(...pweeks) : null;
+    const range = `${dateOf(mon).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} – ${dateOf(keys[6]).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`;
+    return h('section', { class: 'cal-week' + (mon === thisMon ? ' current' : '') },
+      h('div', { class: 'cal-week-head' },
+        h('h3', {}, range),
+        pweek ? h('span', { class: 'week-pill' }, `Week ${pweek}`) : null,
+        h('span', { class: 'muted small' }, `${inWeek.length} workout${inWeek.length === 1 ? '' : 's'}`)),
+      keys.map((k) => {
+        const ws = inWeek.filter((w) => w.workout_date === k);
+        const ss = sessions.filter((x) => dayKey(new Date(x.starts_at)) === k);
+        const d = dateOf(k);
+        return h('div', { class: 'cal-row' + (k === todayK ? ' today' : '') + (k < todayK ? ' past' : ''), 'data-day': k },
+          h('div', { class: 'cal-date' },
+            h('span', {}, d.toLocaleDateString(undefined, { weekday: 'short' })),
+            h('b', {}, String(d.getDate()))),
+          h('div', { class: 'cal-items' },
+            ws.map(workoutChip),
+            ss.map(sessionChip),
+            ws.length || ss.length ? null : h('span', { class: 'cal-rest' }, 'Rest day')));
+      }));
+  });
+
+  fill(body,
+    h('p', { class: 'muted small cal-help' }, canMove
+      ? 'Tap a workout to open it. To move one, press and hold it and drag it to another day, or tap Move.'
+      : 'Tap a workout to open it.'),
+    h('button', { class: 'btn ghost small', onclick: () => renderClientCalendar(body, extraWeeksBefore + 4) }, '↑ Show earlier weeks'),
+    undated.length ? h('section', { class: 'cal-week' },
+      h('div', { class: 'cal-week-head' }, h('h3', {}, 'Any day'), h('span', { class: 'muted small' }, 'No set day: do these when it suits you')),
+      h('div', { class: 'cal-items any-day' }, undated.map(workoutChip))) : null,
+    weekEls);
+  if (canMove) enableCalendarDrag(body, workouts, refresh);
+}
+
+// Press-and-hold (touch) or click-and-drag (mouse) a workout onto another day.
+function enableCalendarDrag(root, workouts, onDone) {
+  // The calendar re-renders into the same element, so replace (don't stack)
+  // the listeners from the previous render.
+  root._calendarDrag?.abort();
+  const listening = new AbortController();
+  root._calendarDrag = listening;
+  const { signal } = listening;
+  const byId = new Map(workouts.map((w) => [w.id, w]));
+  let drag = null;
+  const rowAt = (x, y) => document.elementFromPoint(x, y)?.closest('.cal-row');
+  const clearMarks = () => root.querySelectorAll('.cal-row.drop-ok, .cal-row.drop-no').forEach((r) => r.classList.remove('drop-ok', 'drop-no'));
+  const end = async (commit) => {
+    if (!drag) return;
+    const d = drag;
+    drag = null;
+    clearTimeout(d.timer);
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onUp);
+    document.removeEventListener('pointercancel', onCancel);
+    d.ghost?.remove();
+    d.chip.classList.remove('dragging');
+    document.body.classList.remove('is-dragging');
+    clearMarks();
+    if (commit && d.active) {
+      // Swallow the click that follows a drag so it doesn't open the workout.
+      d.chip.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); }, { capture: true, once: true });
+      const row = rowAt(d.x, d.y);
+      const key = row?.dataset.day;
+      if (key && key !== d.w.workout_date) {
+        if (canMoveTo(d.w, key)) await moveWorkout(d.w, key, onDone);
+        else toast('Workouts can be moved up to 2 weeks either side of their planned day, from today onwards.', true);
+      }
+    }
+  };
+  const activate = () => {
+    if (!drag) return;
+    drag.active = true;
+    const rect = drag.chip.getBoundingClientRect();
+    drag.offsetX = drag.x - rect.left;
+    drag.offsetY = drag.y - rect.top;
+    drag.ghost = drag.chip.cloneNode(true);
+    drag.ghost.classList.add('drag-ghost');
+    drag.ghost.style.width = `${rect.width}px`;
+    document.body.append(drag.ghost);
+    drag.chip.classList.add('dragging');
+    document.body.classList.add('is-dragging');
+    try { navigator.vibrate?.(20); } catch { /* not supported */ }
+    place();
+  };
+  const place = () => {
+    if (!drag?.ghost) return;
+    drag.ghost.style.transform = `translate(${drag.x - drag.offsetX}px, ${drag.y - drag.offsetY}px)`;
+    clearMarks();
+    const row = rowAt(drag.x, drag.y);
+    if (row) row.classList.add(canMoveTo(drag.w, row.dataset.day) ? 'drop-ok' : 'drop-no');
+    // Scroll the page when dragging near the top or bottom edge.
+    const edge = 80;
+    if (drag.y < edge) window.scrollBy(0, -12);
+    else if (drag.y > window.innerHeight - edge) window.scrollBy(0, 12);
+  };
+  function onMove(e) {
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    const moved = Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY);
+    drag.x = e.clientX;
+    drag.y = e.clientY;
+    if (!drag.active) {
+      if (drag.touch) { if (moved > 8) end(false); } // finger moved first: it's a scroll
+      else if (moved > 6) activate();               // mouse: drag straight away
+      return;
+    }
+    place();
+  }
+  function onUp() { end(true); }
+  function onCancel() { end(false); }
+  root.addEventListener('pointerdown', (e) => {
+    const chip = e.target.closest('.cal-chip.workout.movable');
+    if (!chip || e.target.closest('.cal-move') || e.button > 0) return;
+    const w = byId.get(chip.dataset.id);
+    if (!w) return;
+    drag = { chip, w, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, x: e.clientX, y: e.clientY, touch: e.pointerType !== 'mouse', active: false };
+    if (drag.touch) drag.timer = setTimeout(activate, 350);
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointercancel', onCancel);
+  }, { signal });
+  // While dragging with a finger, stop the page scrolling under it.
+  root.addEventListener('touchmove', (e) => { if (drag?.active) e.preventDefault(); }, { passive: false, signal });
+  root.addEventListener('contextmenu', (e) => { if (e.target.closest('.cal-chip.workout.movable')) e.preventDefault(); }, { signal });
 }
 
 // ---------------------------------------------------------------------------
