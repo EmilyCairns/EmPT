@@ -17,3 +17,7 @@ export const ROUND_TO_KG = 2.5;
 // Clients cancelling with less than this many hours' notice see a gentle
 // reminder that your cancellation policy may apply. (They can still cancel.)
 export const LATE_CANCEL_HOURS = 24;
+
+// Plates available in your gym (kg, per plate). Used by the plate
+// calculator on barbell exercises. Remove any you don't have.
+export const PLATES_KG = [25, 20, 15, 10, 5, 2.5, 1.25];

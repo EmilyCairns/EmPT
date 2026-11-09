@@ -57,6 +57,19 @@
   --color-toast-text: var(--color-parchment);
   --color-backdrop: rgb(42 43 47 / 0.45);          /* Ink-tinted dim behind dialogs */
 
+  /* Plate calculator drawing: heavier plates are darker. Warm neutrals
+     only, so the single-accent rule holds. */
+  --plate-25: var(--color-ink);
+  --plate-20: var(--color-charcoal);
+  --plate-15: var(--color-graphite);
+  --plate-10: var(--color-ash);
+  --plate-5: var(--color-warm-taupe);
+  --plate-2-5: var(--color-aged-paper);
+  --plate-1-25: var(--color-parchment);
+  --plate-outline: var(--color-graphite);
+  --bar-steel: var(--color-graphite);
+  --bar-sleeve: var(--color-ash);
+
   /* ===== TYPOGRAPHY ==================================================== */
   /* Serif: editorial headlines only (stands in for Financier Display). */
   --font-display: "Newsreader", "Tiempos Headline", Georgia, "Times New Roman", serif;

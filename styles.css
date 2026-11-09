@@ -527,6 +527,100 @@ input[type="checkbox"], input[type="radio"] {
 .cal-dot { width: var(--space-2); height: var(--space-2); border-radius: var(--radius-pills); background: var(--color-accent); }
 .cal-dot.cancelled { background: transparent; border: var(--border-width) solid var(--color-text-muted); }
 .cal-day-list .eyebrow { margin-bottom: var(--space-3); }
+
+/* ---- Workout page ("Start workout") ----------------------------------- */
+
+/* Read out by screen readers, invisible on screen. */
+.sr-only { position: absolute; width: var(--border-width); height: var(--border-width); overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.workout-page h1 { margin-bottom: var(--space-2); }
+.back-link { margin: var(--space-4) 0 var(--space-6); }
+.workout-page .lead { margin-bottom: var(--space-3); }
+.workout-page > .muted.small { margin-bottom: var(--space-6); }
+.workout-page .card.log-ex { padding: var(--space-6); border-top: 0; }
+.workout-page .log-ex h2 { margin: 0 0 var(--space-1); }
+.workout-page .log-ex .ex-notes { margin: var(--space-2) 0 0; }
+.rest-pick { margin-top: var(--space-2); }
+.workout-finish { margin-top: var(--space-8); }
+
+/* Rest timer: stays at the top of the screen while scrolling. */
+.rest-bar {
+  position: sticky;
+  top: calc(var(--topbar-height) + var(--space-2));
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-cards);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-xl);
+}
+.rest-bar .eyebrow { margin: 0; }
+.timer-controls { display: flex; align-items: center; gap: var(--space-2); }
+.timer-time {
+  min-width: calc(var(--space-20) + var(--space-2));
+  font-family: var(--font-display);
+  font-size: var(--text-heading);
+  line-height: var(--leading-tight);
+  letter-spacing: normal;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.btn.icon.timer-step { border-color: var(--color-input-border); font-size: var(--text-subheading); }
+/* Entered numbers are bold; the plan shows as lighter placeholder text. */
+.workout-page .set-row input { font-weight: var(--weight-semibold); }
+.workout-page .set-row input::placeholder { font-weight: var(--weight-regular); color: var(--color-ash); }
+.rest-bar.running { border-color: var(--color-accent); }
+.rest-bar.running .timer-time { color: var(--color-accent-text); }
+.rest-bar.finished { border-color: var(--color-accent); background: var(--color-accent); }
+.rest-bar.finished .eyebrow, .rest-bar.finished .timer-time { color: var(--color-on-accent); }
+
+/* Tick a set off: starts the rest timer. */
+.set-check {
+  appearance: none;
+  width: var(--control-height-sm);
+  height: var(--control-height-sm);
+  border: var(--border-width) solid var(--color-input-border);
+  border-radius: var(--radius-pills);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font: inherit;
+  font-weight: var(--weight-bold);
+  cursor: pointer;
+  transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
+}
+.set-check[aria-pressed="true"] { border-color: var(--color-accent); background: var(--color-accent); color: var(--color-on-accent); }
+.set-check:focus-visible { outline: var(--border-width-strong) solid var(--color-focus); outline-offset: var(--border-width-strong); }
+.set-row.done .set-num { color: var(--color-text); }
+
+/* Plate calculator. */
+.plates {
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-cards);
+  background: var(--color-surface);
+}
+.plates .row-between { flex-wrap: wrap; }
+.plates .eyebrow { margin: 0; }
+.plates .chips { margin: 0; }
+.barbell-svg { display: block; width: 100%; max-width: var(--dialog-width); height: auto; margin: var(--space-3) auto 0; }
+.bar-shaft { fill: var(--bar-steel); }
+.bar-sleeve { fill: var(--bar-sleeve); }
+.bar-collar { fill: var(--color-ink); }
+.bar-label { fill: var(--color-text-muted); font-family: var(--font-body); font-size: var(--text-mono); }
+.plate { stroke: var(--plate-outline); stroke-width: 1; }
+.plate-25 { fill: var(--plate-25); }
+.plate-20 { fill: var(--plate-20); }
+.plate-15 { fill: var(--plate-15); }
+.plate-10 { fill: var(--plate-10); }
+.plate-5 { fill: var(--plate-5); }
+.plate-2-5 { fill: var(--plate-2-5); }
+.plate-1-25 { fill: var(--plate-1-25); }
+.plates-text { margin: var(--space-2) 0 0; text-align: center; }
 .history-row {
   display: flex;
   flex-wrap: wrap;
@@ -611,6 +705,8 @@ input[type="checkbox"], input[type="radio"] {
   .ex-grid { grid-template-columns: repeat(2, 1fr); }
   .set-row { gap: var(--space-1); }
   .cal-wrap { grid-template-columns: 1fr; }
+  .rest-bar { padding: var(--space-2) var(--space-3); }
+  .workout-page .card.log-ex { padding: var(--space-5) var(--space-4); }
   .calendar { padding: var(--space-3); }
   /* Five client tabs must fit on a phone. */
   .tabs { gap: var(--space-4); }

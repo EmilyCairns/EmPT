@@ -74,6 +74,9 @@ create table if not exists public.exercises (
   updated_at timestamptz not null default now()
 );
 create unique index if not exists exercises_name_key on public.exercises (lower(name));
+-- Barbell exercises show clients a plate calculator. null = decide from the
+-- exercise name (the app recognises squats, deadlifts, bench press etc.).
+alter table public.exercises add column if not exists is_barbell boolean;
 
 -- Rep maxes (1RM, 3RM, 5RM…) per client and exercise. Each test is a new
 -- row, so history is kept; the latest one for a rep count is "current".

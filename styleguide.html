@@ -177,6 +177,26 @@
         </article>
       </section>
 
+      <section class="workout-page">
+        <h3>Workout page</h3>
+        <div class="stack">
+          <div class="rest-bar" style="position:static">
+            <span class="eyebrow">Rest timer</span>
+            <div class="timer-controls"><button class="btn icon timer-step" aria-label="Shorter rest">−</button><span class="timer-time">1:30</span><button class="btn icon timer-step" aria-label="Longer rest">+</button><button class="btn primary small">Start rest</button></div>
+          </div>
+          <div class="rest-bar running" style="position:static">
+            <span class="eyebrow">Resting</span>
+            <div class="timer-controls"><span class="timer-time">1:00</span><button class="btn small">+15s</button><button class="btn ghost small">Stop</button></div>
+          </div>
+          <div class="set-rows">
+            <div class="set-row set-head"><span>Set</span><span>kg</span><span>Reps</span><span>Effort</span><span>Done</span></div>
+            <div class="set-row done"><span class="set-num">1</span><input type="number" value="65"><input type="number" value="8"><input type="number" placeholder="1–10"><button class="set-check" aria-pressed="true" aria-label="Done">✓</button></div>
+            <div class="set-row"><span class="set-num">2</span><input type="number" placeholder="65"><input type="number" placeholder="8"><input type="number" placeholder="1–10"><button class="set-check" aria-pressed="false" aria-label="Done">✓</button></div>
+          </div>
+          <p class="muted small">The plate calculator is drawn by the app, so open a barbell exercise in "Start workout" to see it. Plate colours: <code>--plate-25</code> to <code>--plate-1-25</code> in design-tokens.css.</p>
+        </div>
+      </section>
+
       <section>
         <h3>Sessions</h3>
         <div class="stack">

@@ -4,6 +4,10 @@ import * as config from './config.js';
 const { SUPABASE_URL, SUPABASE_ANON_KEY, APP_NAME, TRAINER_NAME } = config;
 // Optional settings: older config.js files may not have them.
 const ROUND_TO_KG = Number(config.ROUND_TO_KG) > 0 ? Number(config.ROUND_TO_KG) : 2.5;
+// Plates in the gym, heaviest first, and the bars to choose from.
+const PLATES_KG = (Array.isArray(config.PLATES_KG) && config.PLATES_KG.length ? config.PLATES_KG : [25, 20, 15, 10, 5, 2.5, 1.25])
+  .map(Number).filter((n) => n > 0).sort((a, b) => b - a);
+const BARS_KG = [20, 15];
 const LATE_CANCEL_HOURS = Number(config.LATE_CANCEL_HOURS) >= 0 && config.LATE_CANCEL_HOURS != null ? Number(config.LATE_CANCEL_HOURS) : 24;
 
 // ---------------------------------------------------------------------------
@@ -26,6 +30,7 @@ const state = {
   notices: null,       // notice board posts; null until/unless the table exists
   sessions: null,      // booked sessions; null until/unless the table exists
   cal: { month: null, day: null }, // calendar position (first of month, 'YYYY-MM-DD')
+  activeWorkout: null, // client: id of the workout open in "Start workout" mode
   tab: 'workouts',
   chatChannel: null,
   inboxChannel: null,
@@ -221,6 +226,7 @@ async function route(session) {
   state.session = session;
   state.selectedId = null;
   state.view = 'client';
+  state.activeWorkout = null;
   state.unread.clear();
   state.tab = 'workouts';
   if (!session) return renderLogin();
@@ -709,7 +715,8 @@ function workoutCard(w, { actions = [], onChange, trainerFor, maxes = [], logs =
   const hasLogs = myLogs.length > 0;
   const who = trainerFor ? firstName(trainerFor.full_name) : null;
 
-  const logBtn = onLog && !draft ? h('button', { class: 'btn' + (!done && !hasLogs ? ' primary' : done ? ' ghost' : ''), onclick: onLog }, hasLogs ? 'Edit log' : 'Log workout') : null;
+  const logBtn = onLog && !draft ? h('button', { class: 'btn' + (!done && !hasLogs ? ' primary' : done ? ' ghost' : ''), onclick: onLog },
+    done ? 'View workout' : hasLogs ? 'Continue workout' : 'Start workout') : null;
   const toggle = h('button', {
     class: 'btn' + (done || (onLog && !hasLogs) ? '' : ' primary'),
     onclick: async () => {
@@ -771,6 +778,7 @@ function workoutCard(w, { actions = [], onChange, trainerFor, maxes = [], logs =
 
 function renderClientApp() {
   closeChat();
+  if (state.activeWorkout) return renderWorkoutPage();
   const body = h('div', { class: 'tab-body' });
   mount(header(), h('main', { class: 'client-main' },
     h('h1', {}, 'Hi ', h('em', {}, firstName(state.me.full_name))),
@@ -823,7 +831,7 @@ async function renderClientWorkouts(body) {
   const card = (w) => workoutCard(w, {
     onChange: refresh,
     ...ctx,
-    onLog: state.lifting ? () => openLogDialog(w, { clientId: state.me.id, ...ctx, asTrainer: false, onSaved: refresh }) : null,
+    onLog: state.lifting ? () => { state.activeWorkout = w.id; renderClientApp(); } : null,
   });
   fill(body,
     pinned.length ? h('div', { class: 'stack pinned-notices' }, pinned) : null,
@@ -968,19 +976,9 @@ function openLogDialog(w, { clientId, maxes, logs, feedback = null, asTrainer, o
   const existingFb = feedback?.find((f) => f.workout_id === w.id);
   const comment = askFeedback ? h('textarea', { rows: '3', maxlength: '4000', value: existingFb?.comment || '', placeholder: 'How did it go? Anything you want to tell me: what felt good, what felt hard, any pain…' }) : null;
 
-  // The most recent other workout in which this exercise was logged.
-  const previousFor = (e) => {
-    const lib = findLib(e);
-    const same = logs.filter((l) => l.workout_id !== w.id
-      && ((lib && l.exercise_id === lib.id) || libKey(l.exercise_name) === libKey(e.name)));
-    if (!same.length) return null;
-    const newest = same.reduce((a, b) => (a.created_at > b.created_at ? a : b));
-    return same.filter((l) => l.workout_id === newest.workout_id).sort((a, b) => a.set_number - b.set_number);
-  };
-
   const blocks = exercises.map((e, i) => {
     const target = targetFor(e, maxes);
-    const previous = previousFor(e);
+    const previous = previousSets(w, e, logs);
     const planKg = target && !target.missing ? target.kg : previous?.at(-1)?.weight_kg ?? '';
     const planReps = Number.isFinite(parseInt(e.reps, 10)) ? parseInt(e.reps, 10) : '';
     const logged = existing.filter((l) => l.exercise_index === i).sort((a, b) => a.set_number - b.set_number);
@@ -1030,35 +1028,10 @@ function openLogDialog(w, { clientId, maxes, logs, feedback = null, asTrainer, o
       comment ? h('div', { class: 'log-ex' }, field(`Comments for ${TRAINER_NAME} (optional)`, comment)) : null,
     ],
     onSubmit: async (action) => {
-      const rowsToSave = [];
-      for (const b of blocks) {
-        const lib = findLib(b.e);
-        let n = 0;
-        for (const r of b.rows) {
-          const weight = r.weight === '' ? null : Number(r.weight);
-          const reps = r.reps === '' ? null : parseInt(r.reps, 10);
-          const rpe = r.rpe === '' ? null : Number(r.rpe);
-          if (weight == null && reps == null) continue;
-          if (rpe != null && !(rpe >= 1 && rpe <= 10)) return `${b.e.name}: effort should be between 1 and 10.`;
-          if (weight != null && !(weight >= 0 && weight < 1000)) return `${b.e.name}: check the weight.`;
-          rowsToSave.push({
-            client_id: clientId, workout_id: w.id, exercise_index: b.i, exercise_id: lib?.id ?? null,
-            exercise_name: b.e.name, set_number: ++n, weight_kg: weight, reps, rpe,
-          });
-        }
-      }
-      const { error: delError } = await sb.from('set_logs').delete().eq('workout_id', w.id).eq('client_id', clientId);
-      if (delError) return delError.message;
-      if (rowsToSave.length) {
-        const { error: insError } = await sb.from('set_logs').insert(rowsToSave);
-        if (insError) return insError.message;
-      }
-      if (comment) {
-        const { error: fbError } = await sb.from('workout_feedback')
-          .upsert({ workout_id: w.id, client_id: clientId, comment: comment.value.trim() });
-        if (fbError) return fbError.message;
-      }
-      const prs = await recordNewBests(rowsToSave, maxes, clientId);
+      const { rowsToSave, problem } = collectLogRows(blocks, w, clientId);
+      if (problem) return problem;
+      const { error: saveError, prs } = await saveLog(w, { clientId, rowsToSave, maxes, comment: comment ? comment.value.trim() : null });
+      if (saveError) return saveError;
       if (action === 'primary' && !done) {
         const { error: doneError } = await sb.rpc('set_workout_completed', { p_workout_id: w.id, p_done: true });
         if (doneError) toast(doneError.message, true);
@@ -1072,6 +1045,54 @@ function openLogDialog(w, { clientId, maxes, logs, feedback = null, asTrainer, o
       } else onSaved();
     },
   });
+}
+
+// The sets from the most recent other workout in which this exercise was logged.
+function previousSets(w, e, logs) {
+  const lib = findLib(e);
+  const same = logs.filter((l) => l.workout_id !== w.id
+    && ((lib && l.exercise_id === lib.id) || libKey(l.exercise_name) === libKey(e.name)));
+  if (!same.length) return null;
+  const newest = same.reduce((a, b) => (a.created_at > b.created_at ? a : b));
+  return same.filter((l) => l.workout_id === newest.workout_id).sort((a, b) => a.set_number - b.set_number);
+}
+
+// Turns entered sets into rows for set_logs. Empty sets are skipped.
+function collectLogRows(blocks, w, clientId) {
+  const rowsToSave = [];
+  for (const b of blocks) {
+    const lib = findLib(b.e);
+    let n = 0;
+    for (const r of b.rows) {
+      const weight = r.weight === '' || r.weight == null ? null : Number(r.weight);
+      const reps = r.reps === '' || r.reps == null ? null : parseInt(r.reps, 10);
+      const rpe = r.rpe === '' || r.rpe == null ? null : Number(r.rpe);
+      if (weight == null && reps == null) continue;
+      if (rpe != null && !(rpe >= 1 && rpe <= 10)) return { problem: `${b.e.name}: effort should be between 1 and 10.` };
+      if (weight != null && !(weight >= 0 && weight < 1000)) return { problem: `${b.e.name}: check the weight.` };
+      rowsToSave.push({
+        client_id: clientId, workout_id: w.id, exercise_index: b.i, exercise_id: lib?.id ?? null,
+        exercise_name: b.e.name, set_number: ++n, weight_kg: weight, reps, rpe,
+      });
+    }
+  }
+  return { rowsToSave };
+}
+
+// Replaces the saved sets for a workout (and the client's comment, when
+// given), then records any new bests. Returns { error } or { prs }.
+async function saveLog(w, { clientId, rowsToSave, maxes, comment = null }) {
+  const { error: delError } = await sb.from('set_logs').delete().eq('workout_id', w.id).eq('client_id', clientId);
+  if (delError) return { error: delError.message };
+  if (rowsToSave.length) {
+    const { error: insError } = await sb.from('set_logs').insert(rowsToSave);
+    if (insError) return { error: insError.message };
+  }
+  if (comment != null) {
+    const { error: fbError } = await sb.from('workout_feedback').upsert({ workout_id: w.id, client_id: clientId, comment });
+    if (fbError) return { error: fbError.message };
+  }
+  return { prs: await recordNewBests(rowsToSave, maxes, clientId) };
 }
 
 // A logged set counts as a new best when it beats the strongest current max
@@ -1096,6 +1117,362 @@ async function recordNewBests(rows, maxes, clientId) {
   })));
   if (error) { toast(error.message, true); return []; }
   return [...best.values()];
+}
+
+// ---------------------------------------------------------------------------
+// Client: "Start workout" page with rest timer and plate calculator
+// ---------------------------------------------------------------------------
+
+// Barbell exercises show the plate calculator. The library's tick box wins;
+// without one, the name is used as a guide.
+const BARBELL_HINT = /\b(barbell|bb)\b|back squat|front squat|deadlift|bench press|overhead press|military press|good ?morning|hip thrust|clean|snatch|jerk|pendlay|zercher/i;
+const NOT_BARBELL = /dumbbell|\bdb\b|kettlebell|\bkb\b|goblet|cable|machine|smith|trap bar|hex bar|band|bodyweight|landmine/i;
+const guessBarbell = (name) => BARBELL_HINT.test(name || '') && !NOT_BARBELL.test(name || '');
+function isBarbell(e) {
+  const lib = 'is_barbell' in e ? e : findLib(e);
+  return typeof lib?.is_barbell === 'boolean' ? lib.is_barbell : guessBarbell(e.name);
+}
+
+// "90s", "2 min", "1:30", "2-3 min" -> seconds (the lower end of a range).
+function parseRest(text) {
+  const t = String(text || '').toLowerCase().replace(/(\d+(?:\.\d+)?)\s*(?:-|–|to)\s*\d+(?:\.\d+)?/g, '$1').trim();
+  const clock = t.match(/^(\d+):(\d{1,2})$/);
+  if (clock) return Number(clock[1]) * 60 + Number(clock[2]);
+  let total = 0;
+  for (const [, n, unit] of t.matchAll(/(\d+(?:\.\d+)?)\s*(m(?:in(?:ute)?s?)?\b|s(?:ec(?:ond)?s?)?\b)?/g)) {
+    total += unit && unit.startsWith('m') ? Number(n) * 60 : Number(n);
+  }
+  return total > 0 && total <= 1800 ? Math.round(total) : null;
+}
+const clockText = (sec) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+
+// Small per-device memory (timer length, bar choice, unfinished entries).
+function remember(key, value) {
+  try {
+    if (value === undefined) return JSON.parse(localStorage.getItem(`empt:${key}`));
+    if (value === null) localStorage.removeItem(`empt:${key}`); else localStorage.setItem(`empt:${key}`, JSON.stringify(value));
+  } catch { return null; }
+  return null;
+}
+
+// Rest timer: set the length with - / +, then Start rest. Counts down from a
+// fixed end time, so it stays right even if the phone throttles the page.
+function restTimer() {
+  let duration = Number(remember('rest-seconds')) || 90;
+  let endsAt = null;
+  let ticker = null;
+  let audio = null;
+  const time = h('span', { class: 'timer-time' });
+  const label = h('span', { class: 'eyebrow' }, 'Rest timer');
+  const announce = h('span', { class: 'sr-only', 'aria-live': 'assertive' });
+  const step = (d) => h('button', { type: 'button', class: 'btn icon timer-step', 'aria-label': d < 0 ? 'Shorter rest (15 seconds)' : 'Longer rest (15 seconds)', onclick: () => setDuration(duration + d) }, d < 0 ? '−' : '+');
+  const startBtn = h('button', { type: 'button', class: 'btn primary small', onclick: () => start() }, 'Start rest');
+  const addBtn = h('button', { type: 'button', class: 'btn small', onclick: () => { endsAt += 15000; update(); } }, '+15s');
+  const stopBtn = h('button', { type: 'button', class: 'btn ghost small', onclick: () => stop() }, 'Stop');
+  const idle = h('div', { class: 'timer-controls' }, step(-15), time, step(15), startBtn);
+  const running = h('div', { class: 'timer-controls', hidden: true }, addBtn, stopBtn);
+  const el = h('div', { class: 'rest-bar', role: 'timer' }, label, idle, running, announce);
+
+  function show() {
+    const isRunning = endsAt != null;
+    el.classList.toggle('running', isRunning);
+    running.hidden = !isRunning;
+    for (const b of idle.querySelectorAll('button')) b.hidden = isRunning;
+    if (!isRunning) time.textContent = clockText(duration);
+  }
+  function setDuration(sec) {
+    duration = Math.min(Math.max(Math.round(sec / 5) * 5, 15), 600);
+    remember('rest-seconds', duration);
+    show();
+  }
+  function start(sec) {
+    if (sec) setDuration(sec);
+    try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume?.(); } catch { audio = null; }
+    el.classList.remove('finished');
+    label.textContent = 'Resting';
+    endsAt = Date.now() + duration * 1000;
+    clearInterval(ticker);
+    ticker = setInterval(update, 250);
+    show();
+    update();
+  }
+  function update() {
+    if (endsAt == null) return;
+    const left = Math.ceil((endsAt - Date.now()) / 1000);
+    if (left <= 0) return finish();
+    time.textContent = clockText(left);
+  }
+  function stop() {
+    clearInterval(ticker);
+    endsAt = null;
+    label.textContent = 'Rest timer';
+    show();
+  }
+  function finish() {
+    stop();
+    el.classList.add('finished');
+    label.textContent = 'Rest over';
+    time.textContent = 'Go!';
+    announce.textContent = 'Rest over. Time for your next set.';
+    try { navigator.vibrate?.([300, 150, 300]); } catch { /* not supported */ }
+    if (audio) {
+      for (const t of [0, 0.35, 0.7]) {
+        const o = audio.createOscillator();
+        const g = audio.createGain();
+        o.frequency.value = 880;
+        g.gain.setValueAtTime(0.0001, audio.currentTime + t);
+        g.gain.exponentialRampToValueAtTime(0.3, audio.currentTime + t + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + t + 0.25);
+        o.connect(g).connect(audio.destination);
+        o.start(audio.currentTime + t);
+        o.stop(audio.currentTime + t + 0.3);
+      }
+    }
+    setTimeout(() => { if (endsAt == null) { el.classList.remove('finished'); show(); } }, 5000);
+  }
+  show();
+  return { el, start, setDuration, destroy: () => { clearInterval(ticker); audio?.close?.(); } };
+}
+
+// Which plates go on each side of the bar.
+function platesFor(total, bar) {
+  if (!(total > 0)) return null;
+  if (total < bar) return { tooLight: true };
+  let side = (total - bar) / 2;
+  const plates = [];
+  for (const p of PLATES_KG) {
+    while (side >= p - 1e-9) { plates.push(p); side -= p; }
+  }
+  const loaded = bar + 2 * plates.reduce((a, b) => a + b, 0);
+  return { plates, loaded, exact: Math.abs(loaded - total) < 1e-6 };
+}
+
+const svgEl = (tag, attrs = {}, ...kids) => {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
+  el.append(...kids.flat());
+  return el;
+};
+
+// Plate drawing sizes (SVG units): bigger plates are taller and thicker.
+const PLATE_SHAPE = { 25: [100, 14], 20: [96, 13], 15: [86, 12], 10: [74, 10], 5: [56, 8], 2.5: [44, 7], 1.25: [36, 6] };
+function barbellPicture(plates, bar) {
+  const W = 320, H = 110, mid = H / 2, collarL = 110, collarR = W - 110;
+  const shape = (p) => PLATE_SHAPE[p] || [40 + p * 2, 6];
+  const totalThick = plates.reduce((a, p) => a + shape(p)[1] + 1, 0);
+  const squeeze = Math.min(1, 92 / Math.max(totalThick, 1));
+  const parts = [
+    svgEl('rect', { class: 'bar-shaft', x: collarL, y: mid - 3, width: collarR - collarL, height: 6, rx: 2 }),
+    svgEl('rect', { class: 'bar-sleeve', x: 8, y: mid - 5, width: collarL - 8, height: 10, rx: 2 }),
+    svgEl('rect', { class: 'bar-sleeve', x: collarR, y: mid - 5, width: W - 8 - collarR, height: 10, rx: 2 }),
+    svgEl('rect', { class: 'bar-collar', x: collarL - 4, y: mid - 9, width: 4, height: 18, rx: 1 }),
+    svgEl('rect', { class: 'bar-collar', x: collarR, y: mid - 9, width: 4, height: 18, rx: 1 }),
+  ];
+  let left = collarL - 4;
+  let right = collarR + 4;
+  for (const p of plates) {
+    const [ph, pt] = shape(p);
+    const t = pt * squeeze;
+    const cls = `plate plate-${String(p).replace('.', '-')}`;
+    left -= t + 1;
+    parts.push(svgEl('rect', { class: cls, x: left, y: mid - ph / 2, width: t, height: ph, rx: 2 }));
+    parts.push(svgEl('rect', { class: cls, x: right + 1, y: mid - ph / 2, width: t, height: ph, rx: 2 }));
+    right += t + 1;
+  }
+  parts.push(svgEl('text', { class: 'bar-label', x: W / 2, y: mid - 10, 'text-anchor': 'middle' }, `${bar} kg bar`));
+  return svgEl('svg', { viewBox: `0 0 ${W} ${H}`, class: 'barbell-svg', 'aria-hidden': 'true', focusable: 'false' }, parts);
+}
+
+// The plate calculator for one exercise. update(kg) redraws it.
+function plateCalculator(signal) {
+  const body = h('div', { class: 'plates-body' });
+  const barChoice = () => (BARS_KG.includes(Number(remember('bar-kg'))) ? Number(remember('bar-kg')) : BARS_KG[0]);
+  const toggles = BARS_KG.map((b) => h('button', {
+    type: 'button',
+    class: 'chip-toggle',
+    'aria-pressed': String(barChoice() === b),
+    onclick: () => { remember('bar-kg', b); document.dispatchEvent(new Event('empt-bar-change')); },
+  }, `${b} kg bar`));
+  let current = null;
+  const el = h('div', { class: 'plates' },
+    h('div', { class: 'row-between' }, h('p', { class: 'eyebrow' }, 'Plates'), h('div', { class: 'chips', role: 'group', 'aria-label': 'Bar weight' }, toggles)),
+    body);
+  function update(kgValue) {
+    current = Number(kgValue) > 0 ? Number(kgValue) : null;
+    const bar = barChoice();
+    toggles.forEach((t, i) => t.setAttribute('aria-pressed', String(BARS_KG[i] === bar)));
+    if (current == null) {
+      fill(body, h('p', { class: 'muted small' }, 'Enter a weight to see which plates to load.'));
+      return;
+    }
+    const r = platesFor(current, bar);
+    if (r.tooLight) {
+      fill(body, h('p', { class: 'small' }, `${kg(current)} is lighter than the ${bar} kg bar. Use a lighter bar or dumbbells.`));
+      return;
+    }
+    const each = r.plates.length ? r.plates.map((p) => `${p}`).join(' + ') + ' kg' : 'no plates';
+    fill(body,
+      barbellPicture(r.plates, bar),
+      h('p', { class: 'plates-text' }, h('strong', {}, `${kg(current)}: `), `${bar} kg bar + ${each} on each side`),
+      r.exact ? null : h('p', { class: 'muted small' }, `Closest with standard plates: ${kg(r.loaded)}.`));
+  }
+  document.addEventListener('empt-bar-change', () => update(current), { signal });
+  return { el, update };
+}
+
+// Keeps the screen on during a workout, where the phone allows it.
+let wakeLock = null;
+async function keepAwake(on) {
+  try {
+    if (on && document.visibilityState === 'visible') wakeLock = await navigator.wakeLock?.request('screen');
+    else { await wakeLock?.release(); wakeLock = null; }
+  } catch { wakeLock = null; }
+}
+document.addEventListener('visibilitychange', () => { if (state.activeWorkout) keepAwake(true); });
+
+async function renderWorkoutPage() {
+  const id = state.activeWorkout;
+  const clientId = state.me.id;
+  mount(header(), h('main', { class: 'client-main workout-page' }, h('p', { class: 'muted' }, 'Loading…')));
+  const [{ data: w, error }, ctx] = await Promise.all([
+    sb.from('workouts').select('*').eq('id', id).maybeSingle(),
+    loadTrainingData(clientId),
+  ]);
+  if (state.activeWorkout !== id) return;
+  if (error || !w) {
+    toast(error?.message || 'That workout is no longer available.', true);
+    state.activeWorkout = null;
+    return renderClientApp();
+  }
+
+  const page = new AbortController();
+  const timer = restTimer();
+  keepAwake(true);
+  const leave = () => {
+    page.abort();
+    timer.destroy();
+    keepAwake(false);
+    state.activeWorkout = null;
+    renderClientApp();
+  };
+
+  const exercises = Array.isArray(w.exercises) ? w.exercises : [];
+  const done = !!w.completed_at;
+  const existing = ctx.logs.filter((l) => l.workout_id === w.id);
+  const fb = ctx.feedback?.find((f) => f.workout_id === w.id);
+  const draftKey = `workout-draft:${w.id}`;
+  const draft = remember(draftKey);
+  if (draft) toast('Picked up where you left off on this device.');
+  const persist = () => remember(draftKey, { rows: blocks.map((b) => b.rows), comment: comment?.value ?? '' });
+
+  const blocks = exercises.map((e, i) => {
+    const target = targetFor(e, ctx.maxes);
+    const previous = previousSets(w, e, ctx.logs);
+    const planKg = target && !target.missing ? target.kg : previous?.at(-1)?.weight_kg ?? '';
+    const planReps = Number.isFinite(parseInt(e.reps, 10)) ? parseInt(e.reps, 10) : '';
+    const rest = parseRest(e.rest);
+    const logged = existing.filter((l) => l.exercise_index === i).sort((a, b) => a.set_number - b.set_number);
+    const rows = draft?.rows?.[i]
+      || (logged.length
+        ? logged.map((l) => ({ weight: l.weight_kg ?? '', reps: l.reps ?? '', rpe: l.rpe ?? '', done: true }))
+        : Array.from({ length: Math.min(Math.max(parseInt(e.sets, 10) || 1, 1), 10) }, () => ({ weight: '', reps: '', rpe: '', done: false })));
+    const plates = isBarbell(e) ? plateCalculator(page.signal) : null;
+    const latestWeight = () => [...rows].reverse().find((r) => r.weight !== '' && r.weight != null)?.weight ?? planKg;
+
+    const setsEl = h('div', { class: 'set-rows' });
+    const num = (r, key, placeholder, stepSize, label) => h('input', {
+      type: 'number', inputmode: 'decimal', min: '0', step: stepSize, value: r[key] ?? '', placeholder: String(placeholder), 'aria-label': label,
+      oninput: (ev) => { r[key] = ev.target.value; persist(); if (key === 'weight') plates?.update(ev.target.value || planKg); },
+      onfocus: () => { if (key === 'weight') plates?.update(r.weight || planKg); },
+    });
+    const draw = () => setsEl.replaceChildren(
+      h('div', { class: 'set-row set-head', 'aria-hidden': 'true' }, h('span', {}, 'Set'), h('span', {}, 'kg'), h('span', {}, 'Reps'), h('span', {}, 'Effort'), h('span', {}, 'Done')),
+      ...rows.map((r, j) => h('div', { class: 'set-row' + (r.done ? ' done' : '') },
+        h('span', { class: 'set-num' }, String(j + 1)),
+        num(r, 'weight', planKg, '0.5', `${e.name} set ${j + 1} weight in kg`),
+        num(r, 'reps', planReps, '1', `${e.name} set ${j + 1} reps`),
+        num(r, 'rpe', '1–10', '0.5', `${e.name} set ${j + 1} effort out of 10`),
+        h('button', {
+          type: 'button',
+          class: 'set-check',
+          'aria-pressed': String(!!r.done),
+          'aria-label': `Set ${j + 1} of ${e.name} done${rest ? `, then rest ${clockText(rest)}` : ''}`,
+          title: r.done ? 'Done' : 'Mark as done and start rest',
+          onclick: () => {
+            r.done = !r.done;
+            if (r.done) {
+              if (r.weight === '' || r.weight == null) r.weight = planKg;
+              if (r.reps === '' || r.reps == null) r.reps = planReps;
+              timer.start(rest || undefined);
+            }
+            persist();
+            draw();
+            plates?.update(latestWeight());
+          },
+        }, '✓'))));
+    draw();
+    plates?.update(latestWeight());
+
+    const el = h('section', { class: 'card log-ex' },
+      h('p', { class: 'eyebrow' }, String(i + 1).padStart(2, '0')),
+      h('h2', {}, e.name),
+      prescription(e) ? h('p', { class: 'ex-meta' }, prescription(e)) : null,
+      target ? h('p', { class: 'ex-target' }, targetText(target, null)) : null,
+      e.notes ? h('p', { class: 'ex-notes' }, e.notes) : null,
+      previous ? h('p', { class: 'muted small' }, `Last time: ${previous.map(setText).join(' · ')}`) : null,
+      howTo(e),
+      rest ? h('button', { type: 'button', class: 'btn ghost small rest-pick', onclick: () => timer.setDuration(rest) }, `Use ${clockText(rest)} rest`) : null,
+      plates?.el,
+      setsEl,
+      h('div', { class: 'actions' },
+        h('button', { type: 'button', class: 'btn small', onclick: () => { rows.push({ weight: rows.at(-1)?.weight ?? '', reps: '', rpe: '', done: false }); persist(); draw(); } }, '+ Add set'),
+        rows.length ? h('button', { type: 'button', class: 'btn ghost small', onclick: () => { if (rows.length) { rows.pop(); persist(); draw(); } } }, '− Remove last set') : null,
+        planKg !== '' || planReps !== '' ? h('button', {
+          type: 'button', class: 'btn ghost small',
+          onclick: () => { for (const r of rows) { if (r.weight === '') r.weight = planKg; if (r.reps === '') r.reps = planReps; } persist(); draw(); plates?.update(latestWeight()); },
+        }, 'Fill in the plan') : null));
+    return { e, i, rows, el };
+  });
+
+  const comment = ctx.feedback ? h('textarea', {
+    rows: '3', maxlength: '4000', value: draft?.comment ?? fb?.comment ?? '',
+    placeholder: 'How did it go? Anything you want to tell me: what felt good, what felt hard, any pain…',
+  }) : null;
+  comment?.addEventListener('input', persist);
+
+  const saveBtn = h('button', { class: 'btn', onclick: () => finish(false) }, done ? 'Save changes' : 'Save for later');
+  const finishBtn = done ? null : h('button', { class: 'btn primary', onclick: () => finish(true) }, 'Finish workout');
+  async function finish(markDone) {
+    const { rowsToSave, problem } = collectLogRows(blocks, w, clientId);
+    if (problem) return toast(problem, true);
+    saveBtn.disabled = true;
+    if (finishBtn) finishBtn.disabled = true;
+    const { error: saveError, prs } = await saveLog(w, { clientId, rowsToSave, maxes: ctx.maxes, comment: comment ? comment.value.trim() : null });
+    saveBtn.disabled = false;
+    if (finishBtn) finishBtn.disabled = false;
+    if (saveError) return toast(saveError, true);
+    if (markDone) {
+      const { error: doneError } = await sb.rpc('set_workout_completed', { p_workout_id: w.id, p_done: true });
+      if (doneError) toast(doneError.message, true);
+    }
+    remember(draftKey, null);
+    toast(prs.length
+      ? `New best! ${prs.map((p) => `${p.name} ${p.reps}RM ${kg(p.weight)}`).join(', ')}`
+      : markDone ? 'Nice work! Workout finished.' : 'Saved. Come back to it any time.');
+    if (markDone && ctx.feedback) openCheckinDialog(w, { clientId, existing: fb, onDone: leave });
+    else leave();
+  }
+
+  mount(header(), h('main', { class: 'client-main workout-page' },
+    timer.el,
+    h('button', { class: 'btn ghost small back-link', onclick: leave }, '← Back to workouts'),
+    h('p', { class: 'eyebrow' }, w.workout_date ? formatDate(w.workout_date) : 'Any day'),
+    h('h1', {}, w.title),
+    w.notes ? h('p', { class: 'lead' }, w.notes) : null,
+    h('p', { class: 'muted small' }, 'Enter what you lift as you go, and tap ✓ when a set is done: it starts your rest timer. Grey numbers are the plan. Effort is how hard it felt out of 10.'),
+    exercises.length ? h('div', { class: 'stack' }, blocks.map((b) => b.el)) : h('p', { class: 'muted' }, 'This workout has no exercises listed.'),
+    comment ? h('section', { class: 'card' }, field(`Comments for ${TRAINER_NAME} (optional)`, comment)) : null,
+    h('div', { class: 'row-end actions workout-finish' }, saveBtn, finishBtn)));
 }
 
 // ---------------------------------------------------------------------------
@@ -1640,7 +2017,7 @@ function renderLibraryPanel() {
     fill(list, items.length
       ? items.map((x) => h('button', { class: 'client-item', onclick: () => openExerciseDialog(x) },
           h('span', { class: 'client-name' }, x.name),
-          h('span', { class: 'muted small' }, [safeUrl(x.video_url) ? 'Demo video' : null, x.cues ? 'Coaching cues' : null].filter(Boolean).join(' · ') || 'No video or cues yet')))
+          h('span', { class: 'muted small' }, [isBarbell(x) ? 'Barbell' : null, safeUrl(x.video_url) ? 'Demo video' : null, x.cues ? 'Coaching cues' : null].filter(Boolean).join(' · ') || 'No video or cues yet')))
       : h('p', { class: 'muted pad' }, state.library.length
           ? 'No matches.'
           : 'Your library is empty. Add exercises here, or just type new exercise names when you write a workout: they are added automatically.'));
@@ -1662,6 +2039,11 @@ function openExerciseDialog(x) {
   const name = h('input', { required: true, maxlength: '100', value: x?.name || '', placeholder: 'e.g. Romanian deadlift' });
   const video = h('input', { type: 'url', value: x?.video_url || '', placeholder: 'https://youtube.com/…' });
   const cues = h('textarea', { rows: '4', value: x?.cues || '', placeholder: 'e.g. Soft knees. Push hips back. Bar stays close to the legs.' });
+  const barbell = h('input', { type: 'checkbox', checked: (x ? isBarbell(x) : false) || null });
+  // Until the user changes it, a new exercise's tick follows its name.
+  let barbellTouched = !!x;
+  barbell.addEventListener('change', () => { barbellTouched = true; });
+  name.addEventListener('input', () => { if (!barbellTouched) barbell.checked = guessBarbell(name.value); });
   let dlg;
   const extra = x ? h('button', {
     type: 'button',
@@ -1683,12 +2065,15 @@ function openExerciseDialog(x) {
       field('Name', name),
       field('Demo video link (optional)', video, 'A YouTube, Instagram or other video link. Clients open it in a new tab.'),
       field('Coaching cues (optional)', cues),
+      h('label', { class: 'check pin-option' }, barbell, h('span', {}, 'Uses a barbell (clients see which plates to load)')),
     ],
     extra,
     onSubmit: async () => {
       const url = video.value.trim();
       if (url && !safeUrl(url)) return 'The video link should start with https://';
       const row = { name: name.value.trim(), video_url: url, cues: cues.value.trim() };
+      // Only send is_barbell once the database has that column.
+      if (state.library.some((e) => 'is_barbell' in e)) row.is_barbell = barbell.checked;
       const { error } = x
         ? await sb.from('exercises').update(row).eq('id', x.id)
         : await sb.from('exercises').insert(row);
