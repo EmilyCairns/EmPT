@@ -1547,10 +1547,10 @@ function openLogDialog(w, { clientId, maxes, logs, feedback = null, asTrainer, o
 }
 
 // The sets from the most recent other workout in which this exercise was logged.
-const prevSetText = (l) => [
+const prevSetText = (l, withEffort = true) => [
   l.weight_kg != null ? kg(l.weight_kg) : null,
   l.reps != null ? `× ${l.reps}` : null,
-  l.rpe != null ? `· effort ${Number(l.rpe)}` : null,
+  withEffort && l.rpe != null ? `· effort ${Number(l.rpe)}` : null,
 ].filter(Boolean).join(' ') || 'not filled in';
 
 // Every set they've logged for one lift, plus their rep maxes for it.
@@ -1638,15 +1638,19 @@ function collectLogRows(blocks, w, clientId) {
 
 // Replaces the saved sets for a workout (and the client's comment, when
 // given), then records any new bests. Returns { error } or { prs }.
-async function saveLog(w, { clientId, rowsToSave, maxes, comment = null }) {
+async function saveLog(w, { clientId, rowsToSave, maxes, comment = null, effort }) {
   const { error: delError } = await sb.from('set_logs').delete().eq('workout_id', w.id).eq('client_id', clientId);
   if (delError) return { error: delError.message };
   if (rowsToSave.length) {
     const { error: insError } = await sb.from('set_logs').insert(rowsToSave);
     if (insError) return { error: insError.message };
   }
-  if (comment != null) {
-    const { error: fbError } = await sb.from('workout_feedback').upsert({ workout_id: w.id, client_id: clientId, comment });
+  // Effort (1–10 for the whole workout) is only sent when the workout page asks.
+  if (comment != null || effort !== undefined) {
+    const row = { workout_id: w.id, client_id: clientId };
+    if (comment != null) row.comment = comment;
+    if (effort !== undefined) row.effort = effort;
+    const { error: fbError } = await sb.from('workout_feedback').upsert(row);
     if (fbError) return { error: fbError.message };
   }
   return { prs: await recordNewBests(rowsToSave, maxes, clientId) };
@@ -1920,6 +1924,32 @@ function plateCalculator(signal) {
   return { el, update };
 }
 
+// A small outlined barbell for the "how to load the bar" button.
+function barbellIcon() {
+  return svgEl('svg', { viewBox: '0 0 24 24', class: 'bar-icon', 'aria-hidden': 'true' },
+    svgEl('path', { d: 'M2 12h20' }),
+    svgEl('rect', { x: 5, y: 7, width: 3, height: 10, rx: 1 }),
+    svgEl('rect', { x: 16, y: 7, width: 3, height: 10, rx: 1 }),
+    svgEl('rect', { x: 3, y: 9, width: 2, height: 6, rx: 0.5 }),
+    svgEl('rect', { x: 19, y: 9, width: 2, height: 6, rx: 0.5 }));
+}
+
+// The plate calculator in a dialog, for one set's weight.
+function openBarSetup(e, weight) {
+  const page = new AbortController();
+  const calc = plateCalculator(page.signal);
+  calc.update(weight);
+  const dlg = h('dialog', { class: 'dialog bar-setup', 'aria-labelledby': 'bar-setup-title' },
+    h('p', { class: 'eyebrow' }, e.name),
+    h('h2', { id: 'bar-setup-title', tabindex: '-1' }, Number(weight) > 0 ? `Loading ${kg(weight)}` : 'Loading the bar'),
+    calc.el,
+    h('form', { method: 'dialog', class: 'dialog-actions' }, h('span'), h('button', { class: 'btn primary' }, 'Done')));
+  dlg.addEventListener('close', () => { page.abort(); dlg.remove(); });
+  document.body.append(dlg);
+  dlg.showModal();
+  dlg.querySelector('h2').focus();
+}
+
 // Keeps the screen on during a workout, where the phone allows it.
 let wakeLock = null;
 async function keepAwake(on) {
@@ -1963,7 +1993,9 @@ async function renderWorkoutPage() {
   const draftKey = `workout-draft:${w.id}`;
   const draft = remember(draftKey);
   if (draft) toast('Picked up where you left off on this device.');
-  const persist = () => remember(draftKey, { rows: blocks.map((b) => b.rows), comment: comment?.value ?? '' });
+  const persist = () => remember(draftKey, { rows: blocks.map((b) => b.rows), comment: comment?.value ?? '', effort });
+  // How hard the whole workout felt, 1–10 (asked once at the end, not per set).
+  let effort = draft?.effort ?? fb?.effort ?? null;
 
   const blocks = exercises.map((e, i) => {
     const target = targetFor(e, ctx.maxes);
@@ -1976,22 +2008,28 @@ async function renderWorkoutPage() {
       || (logged.length
         ? logged.map((l) => ({ weight: l.weight_kg ?? '', reps: l.reps ?? '', rpe: l.rpe ?? '', done: true }))
         : Array.from({ length: Math.min(Math.max(parseInt(e.sets, 10) || 1, 1), 10) }, () => ({ weight: '', reps: '', rpe: '', done: false })));
-    const plates = isBarbell(e) ? plateCalculator(page.signal) : null;
-    const latestWeight = () => [...rows].reverse().find((r) => r.weight !== '' && r.weight != null)?.weight ?? planKg;
+    const barbell = isBarbell(e);
 
-    const setsEl = h('div', { class: 'set-rows' });
+    const setsEl = h('div', { class: 'set-rows' + (barbell ? ' with-bar' : '') });
     const num = (r, key, placeholder, stepSize, label) => h('input', {
       type: 'number', inputmode: 'decimal', min: '0', step: stepSize, value: r[key] ?? '', placeholder: String(placeholder), 'aria-label': label,
-      oninput: (ev) => { r[key] = ev.target.value; persist(); if (key === 'weight') plates?.update(ev.target.value || planKg); },
-      onfocus: () => { if (key === 'weight') plates?.update(r.weight || planKg); },
+      oninput: (ev) => { r[key] = ev.target.value; persist(); },
     });
     const draw = () => fill(setsEl,
-      h('div', { class: 'set-row set-head', 'aria-hidden': 'true' }, h('span', {}, 'Set'), h('span', {}, 'kg'), h('span', {}, 'Reps'), h('span', {}, 'Effort'), h('span', {}, 'Done')),
+      h('div', { class: 'set-row set-head', 'aria-hidden': 'true' },
+        h('span', {}, 'Set'), h('span', {}, 'kg'), barbell ? h('span') : null, h('span', {}, 'Reps'), h('span', {}, 'Done')),
       ...rows.map((r, j) => h('div', { class: 'set-row' + (r.done ? ' done' : '') },
         h('span', { class: 'set-num' }, String(j + 1)),
         num(r, 'weight', planKg, '0.5', `${e.name} set ${j + 1} weight in kg`),
+        // Barbell lifts: tap the bar to see how to load this set's weight.
+        barbell ? h('button', {
+          type: 'button',
+          class: 'bar-btn',
+          'aria-label': `How to load the bar for set ${j + 1}`,
+          title: 'How to load the bar',
+          onclick: () => openBarSetup(e, r.weight !== '' && r.weight != null ? r.weight : planKg),
+        }, barbellIcon()) : null,
         num(r, 'reps', planReps, '1', `${e.name} set ${j + 1} reps`),
-        num(r, 'rpe', '1–10', '0.5', `${e.name} set ${j + 1} effort out of 10`),
         h('button', {
           type: 'button',
           class: 'set-check',
@@ -2007,17 +2045,23 @@ async function renderWorkoutPage() {
             }
             persist();
             draw();
-            plates?.update(latestWeight());
           },
         }, '✓'),
         // What they did on this set last time, right under where they fill it in.
-        previous?.[j] ? h('p', { class: 'set-prev' }, `Last time: ${prevSetText(previous[j])}`) : null)),
+        previous?.[j] ? h('p', { class: 'set-prev' }, `Last time: ${prevSetText(previous[j], false)}`) : null)),
       previous && previous.length > rows.length
-        ? h('p', { class: 'set-prev more' }, `Last time you also did: ${previous.slice(rows.length).map(prevSetText).join(' · ')}`)
+        ? h('p', { class: 'set-prev more' }, `Last time you also did: ${previous.slice(rows.length).map((l) => prevSetText(l, false)).join(' · ')}`)
         : null);
     draw();
-    plates?.update(latestWeight());
 
+    // One short line: sets, reps, their weight, rest.
+    const plan = [
+      e.sets && `${e.sets} sets`,
+      e.reps && `${e.reps} reps`,
+      target && !target.missing ? `${kg(target.kg)} (${target.pct}% of ${target.rm}RM)` : Number(e.pct) > 0 ? `${e.pct}% of ${parseInt(e.rm, 10) || 1}RM` : null,
+      e.load,
+      e.rest && `rest ${e.rest}`,
+    ].filter(Boolean).join(' · ');
     const el = h('section', { class: 'card log-ex' },
       h('p', { class: 'eyebrow' }, String(i + 1).padStart(2, '0')),
       h('h2', {}, h('button', {
@@ -2026,21 +2070,14 @@ async function renderWorkoutPage() {
         'aria-label': `${e.name}: see your history for this lift`,
         onclick: () => openLiftHistory(e, ctx),
       }, e.name, h('span', { class: 'ex-title-more', 'aria-hidden': 'true' }, 'History ›'))),
-      prescription(e) ? h('p', { class: 'ex-meta' }, prescription(e)) : null,
-      target ? h('p', { class: 'ex-target' }, targetText(target, null)) : null,
+      plan ? h('p', { class: 'ex-meta' }, plan) : null,
+      target?.missing ? h('p', { class: 'ex-target' }, targetText(target, null)) : null,
       e.notes ? h('p', { class: 'ex-notes' }, e.notes) : null,
-      previous ? h('p', { class: 'muted small' }, `Last time was ${shortDay(dayKey(new Date(previous[0].created_at)))}. It's shown under each set.`) : null,
-      howTo(e),
-      rest ? h('button', { type: 'button', class: 'btn ghost small rest-pick', onclick: () => timer.setDuration(rest) }, `Use ${clockText(rest)} rest`) : null,
-      plates?.el,
       setsEl,
-      h('div', { class: 'actions' },
-        h('button', { type: 'button', class: 'btn small', onclick: () => { rows.push({ weight: rows.at(-1)?.weight ?? '', reps: '', rpe: '', done: false }); persist(); draw(); } }, '+ Add set'),
-        rows.length ? h('button', { type: 'button', class: 'btn ghost small', onclick: () => { if (rows.length) { rows.pop(); persist(); draw(); } } }, '− Remove last set') : null,
-        planKg !== '' || planReps !== '' ? h('button', {
-          type: 'button', class: 'btn ghost small',
-          onclick: () => { for (const r of rows) { if (r.weight === '') r.weight = planKg; if (r.reps === '') r.reps = planReps; } persist(); draw(); plates?.update(latestWeight()); },
-        }, 'Fill in the plan') : null));
+      h('div', { class: 'actions ex-actions' },
+        h('button', { type: 'button', class: 'btn small', onclick: () => { rows.push({ weight: rows.at(-1)?.weight ?? '', reps: '', done: false }); persist(); draw(); } }, '+ Add set'),
+        rows.length ? h('button', { type: 'button', class: 'btn ghost small', onclick: () => { if (rows.length) { rows.pop(); persist(); draw(); } } }, '− Remove set') : null),
+      howTo(e));
     return { e, i, rows, el };
   });
 
@@ -2049,6 +2086,25 @@ async function renderWorkoutPage() {
     placeholder: 'How did it go? Anything you want to tell me: what felt good, what felt hard, any pain…',
   }) : null;
   comment?.addEventListener('input', persist);
+  const effortLabels = { 1: 'Very easy', 3: 'Easy', 5: 'Moderate', 7: 'Hard', 9: 'Very hard', 10: 'Everything I had' };
+  const effortHint = h('p', { class: 'muted small effort-hint', 'aria-live': 'polite' });
+  const effortBtns = Array.from({ length: 10 }, (_, k) => h('button', {
+    type: 'button',
+    class: 'effort-btn',
+    'aria-label': `${k + 1} out of 10${effortLabels[k + 1] ? `: ${effortLabels[k + 1]}` : ''}`,
+    onclick: () => { effort = effort === k + 1 ? null : k + 1; showEffort(); persist(); },
+  }, String(k + 1)));
+  function showEffort() {
+    effortBtns.forEach((b, k) => b.setAttribute('aria-pressed', String(effort === k + 1)));
+    const near = effort ? effortLabels[[effort, effort - 1, effort + 1].find((n) => effortLabels[n])] : null;
+    effortHint.textContent = effort ? `${effort}/10${near ? ` · ${near}` : ''}` : '1 is very easy, 10 is everything you had. Optional.';
+  }
+  showEffort();
+  const effortCard = ctx.feedback ? h('section', { class: 'card effort-card' },
+    h('p', { class: 'eyebrow' }, 'Workout effort'),
+    h('p', { class: 'effort-q' }, 'How hard was this workout overall?'),
+    h('div', { class: 'effort-scale', role: 'group', 'aria-label': 'Workout effort out of 10' }, effortBtns),
+    effortHint) : null;
 
   const saveBtn = h('button', { class: 'btn', onclick: () => finish(false) }, done ? 'Save changes' : 'Save for later');
   const finishBtn = done ? null : h('button', { class: 'btn primary', onclick: () => finish(true) }, 'Finish workout');
@@ -2057,7 +2113,7 @@ async function renderWorkoutPage() {
     if (problem) return toast(problem, true);
     saveBtn.disabled = true;
     if (finishBtn) finishBtn.disabled = true;
-    const { error: saveError, prs } = await saveLog(w, { clientId, rowsToSave, maxes: ctx.maxes, comment: comment ? comment.value.trim() : null });
+    const { error: saveError, prs } = await saveLog(w, { clientId, rowsToSave, maxes: ctx.maxes, comment: comment ? comment.value.trim() : null, effort: ctx.feedback ? effort : undefined });
     saveBtn.disabled = false;
     if (finishBtn) finishBtn.disabled = false;
     if (saveError) return toast(saveError, true);
@@ -2079,8 +2135,9 @@ async function renderWorkoutPage() {
     h('p', { class: 'eyebrow' }, [w.workout_date ? formatDate(w.workout_date) : 'Any day', w.program_week ? `Week ${w.program_week}` : null].filter(Boolean).join(' · ')),
     h('h1', {}, w.title),
     w.notes ? h('p', { class: 'lead' }, w.notes) : null,
-    h('p', { class: 'muted small' }, 'Enter what you lift as you go, and tap ✓ when a set is done: it starts your rest timer. Grey numbers are the plan. Effort is how hard it felt out of 10.'),
+    h('p', { class: 'muted small' }, 'Enter what you lift as you go and tap ✓ when a set is done: it starts your rest timer. Grey numbers are the plan.'),
     exercises.length ? h('div', { class: 'stack' }, blocks.map((b) => b.el)) : h('p', { class: 'muted' }, 'This workout has no exercises listed.'),
+    effortCard,
     comment ? h('section', { class: 'card' }, field(`Comments for ${TRAINER_NAME} (optional)`, comment)) : null,
     h('div', { class: 'row-end actions workout-finish' }, saveBtn, finishBtn)));
 }
@@ -2149,9 +2206,10 @@ function openCheckinDialog(w, { clientId, existing, includeComment = false, onDo
 // who = client's first name when the trainer is looking, null for the client.
 function feedbackBox(fb, who) {
   const factors = fb.factors || [];
-  if (!factors.length && !fb.factors_note && !fb.comment) return null;
+  if (!factors.length && !fb.factors_note && !fb.comment && !fb.effort) return null;
   return h('div', { class: 'feedback' },
     h('p', { class: 'eyebrow' }, who ? `${who}'s notes` : 'Your notes'),
+    fb.effort ? h('p', { class: 'feedback-effort' }, h('b', {}, `Effort ${fb.effort}/10`), ' for the whole workout') : null,
     factors.length ? h('div', { class: 'chips' }, factors.map((k) => h('span', { class: 'chip' }, factorLabel(k)))) : null,
     fb.factors_note ? h('p', { class: 'small' }, fb.factors_note) : null,
     fb.comment ? h('p', { class: 'feedback-comment' }, fb.comment) : null);

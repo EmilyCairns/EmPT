@@ -1247,3 +1247,53 @@ button.link {
   cursor: pointer;
 }
 button.link:focus-visible { outline: var(--border-width-strong) solid var(--color-focus); outline-offset: var(--border-width-strong); }
+
+/* Workout page sets: Set · kg · (bar) · Reps · Done. No per-set effort. */
+.workout-page .set-row { grid-template-columns: var(--space-8) 1fr 1fr var(--control-height-sm); }
+.workout-page .set-rows.with-bar .set-row { grid-template-columns: var(--space-8) 1fr var(--control-height-sm) 1fr var(--control-height-sm); }
+.workout-page .log-ex .ex-meta { margin: 0 0 var(--space-1); }
+.ex-actions { margin-top: var(--space-1); }
+.workout-page .log-ex .howto { margin-top: var(--space-4); }
+/* Tap the barbell to see how to load the bar for that set. */
+.bar-btn {
+  display: grid;
+  place-items: center;
+  width: var(--control-height-sm);
+  height: var(--control-height-sm);
+  padding: 0;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-pills);
+  background: var(--color-surface);
+  color: var(--color-accent-text);
+  cursor: pointer;
+  transition: border-color var(--motion-fast), background var(--motion-fast);
+}
+.bar-btn:hover { border-color: var(--color-accent); background: var(--color-surface-raised); }
+.bar-btn:focus-visible { outline: var(--border-width-strong) solid var(--color-focus); outline-offset: var(--border-width-strong); }
+.bar-icon { width: var(--space-6); height: var(--space-6); fill: none; stroke: currentColor; stroke-width: var(--border-width-strong); stroke-linecap: round; stroke-linejoin: round; }
+.bar-setup .eyebrow { margin: 0 0 var(--space-1); }
+.bar-setup h2 { margin-bottom: var(--space-4); }
+.bar-setup h2:focus { outline: none; }
+/* Workout effort: one 1–10 scale at the end of the workout. */
+.effort-q { margin: 0 0 var(--space-4); font-size: var(--text-body-lg); font-weight: var(--weight-semibold); }
+.effort-card .eyebrow { margin: 0 0 var(--space-1); }
+.effort-scale { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: var(--space-1); }
+.effort-btn {
+  min-width: 0;
+  height: var(--control-height-sm);
+  padding: 0;
+  border: var(--border-width) solid var(--color-input-border);
+  border-radius: var(--radius-pills);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: border-color var(--motion-fast), background var(--motion-fast);
+}
+.effort-btn:hover { border-color: var(--color-accent); }
+.effort-btn[aria-pressed="true"] { border-color: var(--color-accent); background: var(--color-accent); color: var(--color-on-accent); }
+.effort-btn:focus-visible { outline: var(--border-width-strong) solid var(--color-focus); outline-offset: var(--border-width-strong); }
+.effort-hint { margin: var(--space-3) 0 0; }
+.feedback-effort { margin: 0 0 var(--space-2); }

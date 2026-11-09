@@ -169,6 +169,8 @@ create table if not exists public.workout_feedback (
   updated_at   timestamptz not null default now()
 );
 create index if not exists workout_feedback_client_idx on public.workout_feedback (client_id);
+-- How hard the whole workout felt, 1–10 (asked once at the end of a workout).
+alter table public.workout_feedback add column if not exists effort smallint check (effort between 1 and 10);
 
 -- Notice board posts from the trainer. client_ids is null for "everyone",
 -- otherwise the post is only shown to the clients listed.
