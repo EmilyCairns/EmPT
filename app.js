@@ -1889,20 +1889,22 @@ function plateLines(plates, bar) {
 function plateCalculator(signal) {
   const body = h('div', { class: 'plates-body' });
   const barChoice = () => (BARS_KG.includes(Number(remember('bar-kg'))) ? Number(remember('bar-kg')) : BARS_KG[0]);
-  const toggles = BARS_KG.map((b) => h('button', {
-    type: 'button',
-    class: 'chip-toggle',
-    'aria-pressed': String(barChoice() === b),
-    onclick: () => { remember('bar-kg', b); document.dispatchEvent(new Event('empt-bar-change')); },
-  }, `${b} kg bar`));
+  // The 20 kg bar is the default; a small tick box switches to the 15 kg bar.
+  const light = BARS_KG[1];
+  const lightBar = h('input', {
+    type: 'checkbox',
+    checked: barChoice() === light || null,
+    onchange: (ev) => { remember('bar-kg', ev.target.checked ? light : BARS_KG[0]); document.dispatchEvent(new Event('empt-bar-change')); },
+  });
   let current = null;
   const el = h('div', { class: 'plates' },
-    h('div', { class: 'row-between' }, h('p', { class: 'eyebrow' }, 'Plates'), h('div', { class: 'chips', role: 'group', 'aria-label': 'Bar weight' }, toggles)),
-    body);
+    h('p', { class: 'eyebrow' }, 'Plates'),
+    body,
+    h('label', { class: 'bar-check' }, lightBar, `Using a ${light} kg bar`));
   function update(kgValue) {
     current = Number(kgValue) > 0 ? Number(kgValue) : null;
     const bar = barChoice();
-    toggles.forEach((t, i) => t.setAttribute('aria-pressed', String(BARS_KG[i] === bar)));
+    lightBar.checked = bar === light;
     if (current == null) {
       fill(body, h('p', { class: 'muted small' }, 'Enter a weight to see which plates to load.'));
       return;

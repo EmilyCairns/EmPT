@@ -1027,7 +1027,6 @@ body.is-dragging { cursor: grabbing; -webkit-user-select: none; user-select: non
   border-radius: var(--radius-cards);
   background: var(--color-surface);
 }
-.plates .row-between { flex-wrap: wrap; }
 .plates .eyebrow { margin: 0; }
 .plates .chips { margin: 0; }
 /* Picture on the left, list of plates on the right (also on phones). */
@@ -1283,3 +1282,7 @@ button.link:focus-visible { outline: var(--border-width-strong) solid var(--colo
 .effort-btn:focus-visible { outline: var(--border-width-strong) solid var(--color-focus); outline-offset: var(--border-width-strong); }
 .effort-hint { margin: var(--space-3) 0 0; }
 .feedback-effort { margin: 0 0 var(--space-2); }
+
+/* The bar choice is a small detail: one tick box under the plates. */
+.bar-check { display: inline-flex; align-items: center; gap: var(--space-2); margin-top: var(--space-3); color: var(--color-text-muted); font-size: var(--text-body-sm); cursor: pointer; }
+.bar-check input { width: var(--space-4); height: var(--space-4); margin: 0; accent-color: var(--color-accent); cursor: pointer; }
