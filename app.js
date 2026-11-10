@@ -1483,15 +1483,30 @@ function dayShort(key) {
   return `${d.toLocaleDateString(undefined, { weekday: 'short' })} ${d.getDate()}`;
 }
 
+// Small outlined icons (DESIGN.md: outlined, 1.5–2px stroke, terracotta),
+// drawn on a 24-unit grid. Decorative only: the text beside them says it all.
+const ICONS = {
+  calendar: ['M4 6h16v14H4z', 'M4 10h16', 'M8 3v4', 'M16 3v4'],
+  clock: ['M12 3a9 9 0 1 1 0 18a9 9 0 1 1 0-18', 'M12 7v5l3 2'],
+  megaphone: ['M3 10v4h4l7 4V6L7 10z', 'M17 9a4 4 0 0 1 0 6', 'M19.5 6.5a7.5 7.5 0 0 1 0 11'],
+  trophy: ['M8 4h8v5a4 4 0 0 1-8 0z', 'M8 6H5a3 3 0 0 0 3.5 4', 'M16 6h3a3 3 0 0 1-3.5 4', 'M12 13v4', 'M8.5 20h7', 'M10 17h4v3h-4z'],
+  chart: ['M4 20h16', 'M6 20v-6', 'M11 20V9', 'M16 20v-9', 'M5 10l5-4l4 3l5-5'],
+  dumbbell: ['M5 7h3v10H5z', 'M16 7h3v10h-3z', 'M2.5 10v4', 'M21.5 10v4', 'M8 12h8'],
+  person: ['M12 4a4 4 0 1 1 0 8a4 4 0 1 1 0-8', 'M4 21a8 8 0 0 1 16 0'],
+};
+const icon = (name) => svgEl('svg', { viewBox: '0 0 24 24', class: 'icon', 'aria-hidden': 'true' },
+  ICONS[name].map((d) => svgEl('path', { d })));
+
 // A tappable row in one of Home's flat lists.
-function homeRow({ when, title, meta, onclick, dot = false, label }) {
+function homeRow({ when, title, meta, onclick, dot = false, label, kind }) {
   return h('li', {}, h('button', { class: 'home-row', onclick, 'aria-label': label || null },
+    kind ? h('span', { class: 'row-icon' }, icon(kind)) : null,
     when ? h('span', { class: 'home-when' }, when) : null,
     h('span', { class: 'home-what' }, h('b', {}, title, dot ? h('span', { class: 'dot', title: 'New' }) : null), meta ? h('span', { class: 'muted small' }, meta) : null),
     h('span', { class: 'home-chev', 'aria-hidden': 'true' }, '›')));
 }
-const homeSection = (title, action, ...content) => h('section', { class: 'home-section' },
-  h('div', { class: 'row-between' }, h('h3', {}, title), action),
+const homeSection = (title, action, iconName, ...content) => h('section', { class: 'home-section' },
+  h('div', { class: 'row-between' }, h('h3', {}, h('span', { class: 'sec-icon' }, icon(iconName)), title), action),
   content);
 
 async function renderClientHome(body) {
@@ -1544,7 +1559,7 @@ async function renderClientHome(body) {
   if (todo) {
     const more = todays.filter((w) => !w.completed_at).length - 1;
     todayCard = h('section', { class: 'card today-card' },
-      h('p', { class: 'eyebrow' }, 'Today’s workout'),
+      h('p', { class: 'eyebrow today-label' }, icon('dumbbell'), 'Today’s workout'),
       h('h2', {}, todo.title),
       h('p', { class: 'today-meta' }, workoutMeta(todo), more > 0 ? ` · +${more} more today` : null),
       sessionLine,
@@ -1599,7 +1614,7 @@ async function renderClientHome(body) {
     onclick: () => goTab('progress'),
     'aria-label': `${plural(streak, 'week')} in a row${thisWeek.hit ? ', this week sealed' : ''}. See your progress`,
   }, h('b', { 'aria-hidden': 'true' }, String(streak)), h('span', { 'aria-hidden': 'true' }, 'streak'));
-  const weekStrip = workouts.length ? homeSection('This week', null,
+  const weekStrip = workouts.length ? homeSection('This week', null, 'calendar',
     h('div', { class: 'week-strip' }, dots, streakSeal),
     h('p', { class: 'muted small week-msg' }, weekMsg)) : null;
 
@@ -1607,15 +1622,15 @@ async function renderClientHome(body) {
   const future = [
     ...upcoming.filter((w) => w.workout_date).slice(0, 3).map((w) => ({
       at: `${w.workout_date}T12:00`, when: dayShort(w.workout_date), title: w.title, meta: workoutMeta(w),
-      onclick: () => (state.lifting ? open(w) : goTab('program')),
+      onclick: () => (state.lifting ? open(w) : goTab('program')), kind: 'dumbbell',
     })),
     ...(state.sessions || []).filter((x) => x.status === 'booked' && new Date(x.starts_at) > new Date() && x !== sessionToday).slice(0, 3).map((x) => ({
       at: new Date(x.starts_at).toISOString(), when: dayShort(dayKey(new Date(x.starts_at))),
       title: `Session with ${TRAINER_NAME}`, meta: [timeText(new Date(x.starts_at)), x.location].filter(Boolean).join(' · '),
-      onclick: () => goTab('calendar'), session: true,
+      onclick: () => goTab('calendar'), session: true, kind: 'person',
     })),
   ].sort((a, b) => a.at.localeCompare(b.at)).slice(0, 3);
-  const comingUp = future.length ? homeSection('Coming up', h('button', { class: 'btn ghost small', onclick: () => goTab('calendar') }, 'Calendar'),
+  const comingUp = future.length ? homeSection('Coming up', h('button', { class: 'btn ghost small', onclick: () => goTab('calendar') }, 'Calendar'), 'clock',
     h('ul', { class: 'home-list' }, future.map((f) => {
       const row = homeRow(f);
       if (f.session) row.firstChild.classList.add('is-session');
@@ -1633,7 +1648,7 @@ async function renderClientHome(body) {
   // ---- From the trainer: one line per post; tap to read ----
   const read = readNotices();
   const posts = (state.notices || []).slice(0, 3);
-  const noticesBlock = posts.length ? homeSection(`From ${TRAINER_NAME}`, h('button', { class: 'btn ghost small', onclick: () => goTab('notices') }, 'See all'),
+  const noticesBlock = posts.length ? homeSection(`From ${TRAINER_NAME}`, h('button', { class: 'btn ghost small', onclick: () => goTab('notices') }, 'See all'), 'megaphone',
     h('ul', { class: 'home-list' }, posts.map((n) => homeRow({
       when: n.pinned ? 'Pinned' : dayShort(n.created_at.slice(0, 10)),
       title: n.title,
@@ -1643,7 +1658,7 @@ async function renderClientHome(body) {
     })))) : null;
 
   // ---- Team wins: the latest couple, one line each ----
-  const winsBlock = state.community ? homeSection('Team wins', h('button', { class: 'btn ghost small', onclick: () => goTab('wins') }, 'See all'),
+  const winsBlock = state.community ? homeSection('Team wins', h('button', { class: 'btn ghost small', onclick: () => goTab('wins') }, 'See all'), 'trophy',
     latestWins.length
       ? h('ul', { class: 'home-list' }, latestWins.map((w) => homeRow({
           title: w.kind === 'shoutout' ? `${TRAINER_NAME}: ${w.title}` : `${w.display_name || 'A teammate'} ${w.title}`,
@@ -1658,7 +1673,7 @@ async function renderClientHome(body) {
   const total12 = stats.weeks.slice(-12).reduce((n, w) => n + w.done, 0);
   const progressRow = workouts.length ? h('section', { class: 'home-section' },
     h('ul', { class: 'home-list' }, homeRow({
-      title: 'Your progress',
+      title: 'Your progress', kind: 'chart',
       meta: `${plural(streak, 'week')} in a row · ${plural(total12, 'workout')} in 12 weeks${state.lifting ? ' · lifts' : ''}`,
       onclick: () => goTab('progress'),
     }))) : null;

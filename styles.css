@@ -1401,3 +1401,25 @@ button.link:focus-visible { outline: var(--border-width-strong) solid var(--colo
   .health-list dt { margin-top: var(--space-2); }
 }
 .health-list a { color: var(--color-accent-text); font-weight: var(--weight-semibold); }
+
+/* Home icons: outlined terracotta line icons that tell the sections apart. */
+.icon { width: var(--space-5); height: var(--space-5); flex: none; fill: none; stroke: currentColor; stroke-width: var(--border-width-strong); stroke-linecap: round; stroke-linejoin: round; }
+.home-section h3 { display: flex; align-items: center; gap: var(--space-3); }
+.sec-icon, .row-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--control-height-sm);
+  height: var(--control-height-sm);
+  border-radius: var(--radius-pills);
+  background: var(--color-surface-raised);
+  color: var(--color-accent-text);
+}
+.row-icon { width: var(--space-8); height: var(--space-8); background: none; border: var(--border-width) solid var(--color-border); }
+.row-icon .icon { width: var(--space-4); height: var(--space-4); }
+.home-row.is-session .row-icon { border-color: var(--color-session-bg); background: var(--color-session-bg); color: var(--color-session-text); }
+.today-label { display: flex; align-items: center; gap: var(--space-2); }
+.today-label .icon { width: var(--space-4); height: var(--space-4); }
+/* "Your progress" is a row with no heading: its icon gets the full badge. */
+.home-row > .row-icon:first-child:not(:has(+ .home-when)) { width: var(--control-height-sm); height: var(--control-height-sm); border: 0; background: var(--color-surface-raised); }
+.home-row > .row-icon:first-child:not(:has(+ .home-when)) .icon { width: var(--space-5); height: var(--space-5); }
