@@ -214,6 +214,31 @@ create table if not exists public.excused_weeks (
   primary key (client_id, week_start)
 );
 
+-- The client's health form, filled in on first sign-in: birthday,
+-- pre-exercise screening (APSS stage 1), injuries and medical, goals and
+-- lifestyle, emergency contact. Only that client and the trainer can read it.
+-- screening is {question_key: true/false}; screening_flag is worked out by
+-- the database (any "yes"), so it can't be set by hand.
+create table if not exists public.client_health (
+  client_id          uuid primary key references public.clients (id) on delete cascade,
+  birthday           date check (birthday between '1900-01-01' and current_date + 1),
+  screening          jsonb not null default '{}'::jsonb check (jsonb_typeof(screening) = 'object'),
+  screening_flag     boolean generated always as (jsonb_path_exists(screening, '$.* ? (@ == true)')) stored,
+  pregnancy          text not null default '' check (pregnancy in ('', 'no', 'pregnant', 'postnatal')),
+  injuries           text not null default '' check (char_length(injuries) <= 3000),
+  medical            text not null default '' check (char_length(medical) <= 3000),
+  goals              text not null default '' check (char_length(goals) <= 3000),
+  training_history   text not null default '' check (char_length(training_history) <= 3000),
+  lifestyle          text not null default '' check (char_length(lifestyle) <= 3000),
+  availability       text not null default '' check (char_length(availability) <= 1000),
+  emergency_name     text not null default '' check (char_length(emergency_name) <= 200),
+  emergency_relation text not null default '' check (char_length(emergency_relation) <= 100),
+  emergency_phone    text not null default '' check (char_length(emergency_phone) <= 50),
+  completed_at       timestamptz,
+  created_at         timestamptz not null default now(),
+  updated_at         timestamptz not null default now()
+);
+
 -- Community: clients who have chosen to share their wins with other clients.
 -- No row means nothing of theirs appears in the feed.
 create table if not exists public.community_members (
@@ -446,6 +471,10 @@ drop trigger if exists workout_feedback_touch_updated_at on public.workout_feedb
 create trigger workout_feedback_touch_updated_at
   before update on public.workout_feedback
   for each row execute function public.touch_updated_at();
+drop trigger if exists client_health_touch_updated_at on public.client_health;
+create trigger client_health_touch_updated_at
+  before update on public.client_health
+  for each row execute function public.touch_updated_at();
 
 drop trigger if exists announcements_touch_updated_at on public.announcements;
 create trigger announcements_touch_updated_at
@@ -530,6 +559,27 @@ alter table public.announcements enable row level security;
 alter table public.sessions enable row level security;
 alter table public.programs enable row level security;
 alter table public.excused_weeks enable row level security;
+alter table public.client_health enable row level security;
+
+-- Health form: the client reads, adds and updates their own; the trainer
+-- can do anything (e.g. add a birthday). Nobody else sees it.
+drop policy if exists "client_health: read own or trainer" on public.client_health;
+create policy "client_health: read own or trainer" on public.client_health
+  for select to authenticated
+  using (public.is_trainer() or client_id = public.my_client_id());
+drop policy if exists "client_health: add own or trainer" on public.client_health;
+create policy "client_health: add own or trainer" on public.client_health
+  for insert to authenticated
+  with check (public.is_trainer() or client_id = public.my_client_id());
+drop policy if exists "client_health: edit own or trainer" on public.client_health;
+create policy "client_health: edit own or trainer" on public.client_health
+  for update to authenticated
+  using (public.is_trainer() or client_id = public.my_client_id())
+  with check (public.is_trainer() or client_id = public.my_client_id());
+drop policy if exists "client_health: trainer removes" on public.client_health;
+create policy "client_health: trainer removes" on public.client_health
+  for delete to authenticated
+  using (public.is_trainer());
 alter table public.community_members enable row level security;
 alter table public.wins enable row level security;
 alter table public.win_reactions enable row level security;
@@ -745,7 +795,7 @@ create policy "messages: send as yourself" on public.messages
 revoke all on public.trainers, public.clients, public.workouts, public.messages, public.client_notes,
   public.exercises, public.client_maxes, public.set_logs, public.workout_feedback, public.announcements,
   public.sessions, public.programs, public.excused_weeks, public.community_members, public.wins,
-  public.win_reactions from anon, authenticated;
+  public.win_reactions, public.client_health from anon, authenticated;
 grant select, insert, update, delete on public.clients, public.workouts, public.client_notes,
   public.exercises, public.client_maxes to authenticated;
 grant select, insert, delete on public.set_logs to authenticated;
@@ -755,6 +805,7 @@ grant select, insert, update, delete on public.sessions to authenticated;
 grant select, insert, update, delete on public.programs to authenticated;
 grant select, insert, delete on public.excused_weeks to authenticated;
 grant select, insert, delete on public.community_members, public.wins, public.win_reactions to authenticated;
+grant select, insert, update, delete on public.client_health to authenticated;
 revoke execute on function public.shares_wins(uuid) from public, anon;
 grant execute on function public.shares_wins(uuid) to authenticated;
 revoke execute on function public.set_win_name() from public, anon, authenticated;

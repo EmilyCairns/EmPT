@@ -1286,3 +1286,61 @@ button.link:focus-visible { outline: var(--border-width-strong) solid var(--colo
 /* The bar choice is a small detail: one tick box under the plates. */
 .bar-check { display: inline-flex; align-items: center; gap: var(--space-2); margin-top: var(--space-3); color: var(--color-text-muted); font-size: var(--text-body-sm); cursor: pointer; }
 .bar-check input { width: var(--space-4); height: var(--space-4); margin: 0; accent-color: var(--color-accent); cursor: pointer; }
+
+/* Health form (clients, first sign-in). */
+.health-page .lead { margin-bottom: var(--space-2); }
+.health-form .card > .eyebrow { margin: 0 0 var(--space-3); }
+.screen-q { margin: 0; padding: var(--space-3) 0; border: 0; border-bottom: var(--border-width) solid var(--color-border); }
+.screen-q:last-of-type { border-bottom: 0; }
+.screen-q legend { display: flex; gap: var(--space-2); padding: 0; margin-bottom: var(--space-2); font-weight: var(--weight-semibold); }
+.screen-n { color: var(--color-accent-text); }
+.yn-row { display: flex; gap: var(--space-2); }
+.yn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-height-sm);
+  padding: 0 var(--space-4);
+  border: var(--border-width) solid var(--color-input-border);
+  border-radius: var(--radius-pills);
+  background: var(--color-surface);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+.yn:has(input:checked) { border-color: var(--color-accent); color: var(--color-accent-text); }
+.yn input, .consent input { margin: 0; accent-color: var(--color-accent); }
+.yn:focus-within { outline: var(--border-width-strong) solid var(--color-focus); outline-offset: var(--border-width-strong); }
+.health-flag { margin-top: var(--space-3); border-color: var(--color-accent); }
+.health-flag p { margin: 0; }
+.health-flag ul { margin: var(--space-2) 0; padding-left: var(--space-5); }
+.consent { display: flex; align-items: flex-start; gap: var(--space-3); font-size: var(--text-body-sm); cursor: pointer; }
+.consent input { width: var(--space-5); height: var(--space-5); flex: none; }
+.home-foot { margin: var(--space-2) 0 0; text-align: center; }
+
+/* Their birthday: a message from the trainer at the top of Home. */
+.birthday-card { border: var(--border-width-strong) solid var(--color-accent); background: var(--color-surface); text-align: center; }
+.birthday-card .eyebrow { margin: 0 0 var(--space-2); }
+.birthday-card h2 { margin: 0 0 var(--space-2); font-size: var(--text-heading); line-height: var(--leading-heading); }
+.birthday-card p:last-child { margin: 0; }
+
+/* Trainer: the client's health form on Consult notes. */
+.health-card h4 { margin: var(--space-1) 0 var(--space-3); }
+.health-card .row-between .eyebrow { margin: 0; }
+.health-list { display: grid; grid-template-columns: minmax(0, calc(var(--space-20) * 2.5)) 1fr; gap: var(--space-2) var(--space-4); margin: var(--space-4) 0 0; }
+.health-list dt { color: var(--color-text-muted); font-size: var(--text-body-sm); }
+.health-list dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.client-flags { color: var(--color-accent-text); font-size: var(--text-eyebrow); font-weight: var(--weight-semibold); }
+
+/* Birthdays on the trainer's calendar. */
+.cal-day { position: relative; }
+.cal-bday { position: absolute; top: var(--space-1); right: var(--space-1); color: var(--color-accent-text); font-size: var(--text-mono); line-height: var(--leading-tight); }
+.bday-list { margin: 0 0 var(--space-3); padding: 0; list-style: none; }
+.bday-list li { padding: var(--space-2) 0; border-bottom: var(--border-width) solid var(--color-border); }
+.bday-list li:last-child { border-bottom: 0; }
+.bday-date { display: inline-block; min-width: calc(var(--space-16) + var(--space-2)); color: var(--color-accent-text); font-weight: var(--weight-semibold); }
+.month-bdays h3 { margin-top: var(--space-6); }
+@media (max-width: 760px) {
+  .health-list { grid-template-columns: 1fr; gap: 0; }
+  .health-list dt { margin-top: var(--space-2); }
+}
+.health-list a { color: var(--color-accent-text); font-weight: var(--weight-semibold); }

@@ -28,6 +28,9 @@ const state = {
   library: [],         // exercise library (both roles)
   lifting: true,       // false until the database has the lifting tables
   notices: null,       // notice board posts; null until/unless the table exists
+  health: null,        // client: their health form ({} = not filled in); null until the table exists
+  healthByClient: null, // trainer: client id -> { birthday, screening… }
+  editHealth: false,   // client: updating their health form
   community: null,     // Team wins: client { member } / trainer { members }; null until the tables exist
   sessions: null,      // booked sessions; null until/unless the table exists
   cal: { month: null, day: null }, // calendar position (first of month, 'YYYY-MM-DD')
@@ -245,7 +248,7 @@ async function route(session) {
   if (!me) return renderNotLinked();
   state.me = me;
   state.tab = 'home';
-  await Promise.all([loadLibrary(), loadNotices(), loadSessions(me.id), loadPrograms(me.id).then((p) => { state.myPrograms = p; }), loadCommunity()]);
+  await Promise.all([loadLibrary(), loadNotices(), loadSessions(me.id), loadPrograms(me.id).then((p) => { state.myPrograms = p; }), loadCommunity(), loadMyHealth()]);
   renderClientApp();
 }
 
@@ -278,7 +281,7 @@ const payLabel = (clientId) => {
 };
 
 async function startTrainer() {
-  await Promise.all([loadClients(), loadLibrary(), loadNotices(), loadSessions(), loadCommunity()]);
+  await Promise.all([loadClients(), loadLibrary(), loadNotices(), loadSessions(), loadCommunity(), loadHealthSummary()]);
   // Hear about new client messages anywhere in the app.
   state.inboxChannel = sb.channel(`inbox-${Date.now()}`)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, ({ new: m }) => {
@@ -338,7 +341,18 @@ function renderClientList() {
       onclick: () => selectClient(c.id),
     },
       h('span', { class: 'client-name' }, c.full_name, state.unread.has(c.id) ? h('span', { class: 'dot', title: 'New message' }) : null),
-      h('span', { class: 'muted small' }, [c.email || 'No account yet', payLabel(c.id)].filter(Boolean).join(' · ')))));
+      h('span', { class: 'muted small' }, [c.email || 'No account yet', payLabel(c.id)].filter(Boolean).join(' · ')),
+      clientFlags(c))));
+}
+
+// Small terracotta notes under a client's name: birthday today, health check.
+function clientFlags(c) {
+  const hr = state.healthByClient?.get(c.id);
+  const flags = [
+    isBirthdayOn(hr?.birthday, today()) ? 'Birthday today' : null,
+    hr?.completed_at && healthFlag(hr) ? 'Health check: see notes' : null,
+  ].filter(Boolean);
+  return flags.length ? h('span', { class: 'client-flags' }, flags.join(' · ')) : null;
 }
 
 function selectClient(id) {
@@ -435,6 +449,8 @@ function openClientDialog(c, { focusEmail = false } = {}) {
   const name = h('input', { required: true, maxlength: '100', value: c?.full_name || '', autocomplete: 'off' });
   const email = h('input', { type: 'email', value: c?.email || '', autocomplete: 'off', placeholder: 'Add now or later' });
   const currentPay = c ? state.payMethods?.get(c.id) || '' : '';
+  const currentBirthday = c ? state.healthByClient?.get(c.id)?.birthday || '' : '';
+  const birthday = state.healthByClient ? h('input', { type: 'date', value: currentBirthday, min: '1900-01-01', max: today() }) : null;
   const pay = state.payMethods ? h('select', {},
     h('option', { value: '' }, 'Not set'),
     PAY_METHODS.map(([key, label]) => h('option', { value: key, selected: currentPay === key || null }, label))) : null;
@@ -465,6 +481,7 @@ function openClientDialog(c, { focusEmail = false } = {}) {
       field('Full name', name),
       field('Email (optional)', email, emailHint),
       pay ? field('How they pay (only you see this)', pay) : null,
+      birthday ? field('Birthday (optional)', birthday, 'Shows on your calendar. Clients add or change it in their health form.') : null,
     ],
     extra,
     onSubmit: async () => {
@@ -478,6 +495,11 @@ function openClientDialog(c, { focusEmail = false } = {}) {
       if (pay && payValue !== (state.payMethods.get(data.id) || null)) {
         const { error: payError } = await sb.from('client_notes').upsert({ client_id: data.id, payment_method: payValue });
         if (payError) toast(`Saved, but the payment method didn't save: ${payError.message}`, true);
+      }
+      if (birthday && birthday.value !== currentBirthday) {
+        const { error: bError } = await sb.from('client_health').upsert({ client_id: data.id, birthday: birthday.value || null });
+        if (bError) toast(`Saved, but the birthday didn't save: ${bError.message}`, true);
+        else await loadHealthSummary();
       }
       await loadClients();
       state.selectedId = data.id;
@@ -493,6 +515,239 @@ function openClientDialog(c, { focusEmail = false } = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// Client health form: filled in on first sign-in (birthday, pre-exercise
+// screening, injuries and medical, goals and lifestyle, emergency contact).
+// Only the client and the trainer can read it (enforced by the database).
+// ---------------------------------------------------------------------------
+
+// Stage 1 of the Adult Pre-Exercise Screening System (APSS), the Australian
+// standard (ESSA, Fitness Australia, Sports Medicine Australia). Keys are
+// stored; check the wording against the current ESSA form.
+const SCREENING = [
+  ['heart', 'Has a doctor ever told you that you have a heart condition, or have you ever had a stroke?'],
+  ['chest_pain', 'Do you ever have unexplained pain or discomfort in your chest, at rest or during exercise?'],
+  ['dizzy', 'Do you ever feel faint, dizzy or lose your balance during exercise?'],
+  ['asthma', 'Have you had an asthma attack that needed immediate medical attention in the last 12 months?'],
+  ['diabetes', 'If you have diabetes (type 1 or 2), have you had trouble controlling your blood sugar in the last 3 months?'],
+  ['joints', 'Do you have a diagnosed muscle, bone, tendon, ligament or joint problem that you’ve been told could be made worse by exercise?'],
+  ['other', 'Do you have any other medical condition that may make it dangerous for you to exercise?'],
+];
+const PREGNANCY = [
+  ['', 'Doesn’t apply / prefer not to say'],
+  ['no', 'No'],
+  ['pregnant', 'Yes, I’m pregnant'],
+  ['postnatal', 'I’ve had a baby in the last 12 months'],
+];
+// [key, label, placeholder, section]
+const HEALTH_TEXT = [
+  ['injuries', 'Injuries, surgeries or ongoing pain', 'e.g. Left knee ACL reconstruction in 2022, lower back gets tight', 'medical'],
+  ['medical', 'Medical conditions, medications or allergies', 'e.g. Asthma (Ventolin before training), allergic to bees', 'medical'],
+  ['goals', 'What would you like to achieve?', 'In your own words', 'goals'],
+  ['training_history', 'Your training so far', 'e.g. Gym on and off for 2 years, ran a half marathon last year', 'goals'],
+  ['lifestyle', 'Work, sleep and stress', 'e.g. Rotating night shifts, about 6 hours’ sleep, busy at work', 'goals'],
+  ['availability', 'When can you usually train?', 'e.g. Mon and Wed before 7 am, weekends', 'goals'],
+];
+const screeningYes = (hr) => SCREENING.filter(([k]) => hr?.screening?.[k] === true);
+const healthFlag = (hr) => (hr?.screening_flag ?? null) ?? screeningYes(hr).length > 0;
+
+// Is `key` (YYYY-MM-DD) their birthday? 29 February birthdays are
+// celebrated on 28 February in other years.
+function isBirthdayOn(birthday, key) {
+  if (!birthday || !key) return false;
+  const [, m, d] = birthday.split('-').map(Number);
+  const [y, km, kd] = key.split('-').map(Number);
+  const leap = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+  return km === m && kd === (m === 2 && d === 29 && !leap ? 28 : d);
+}
+function ageOn(birthday, key) {
+  const [by, bm, bd] = birthday.split('-').map(Number);
+  const [y, m, d] = key.split('-').map(Number);
+  return y - by - (m < bm || (m === bm && d < bd) ? 1 : 0);
+}
+// The age they turn on their birthday `key` (handles 29 February in other years).
+const turnsOn = (birthday, key) => ageOn(birthday, key) + (ageOn(birthday, key) === ageOn(birthday, addDays(key, -1)) ? 1 : 0);
+// Clients (trainer view) with a birthday on a given day.
+const birthdaysOn = (key) => (state.healthByClient
+  ? state.clients.filter((c) => isBirthdayOn(state.healthByClient.get(c.id)?.birthday, key))
+  : []);
+
+// Client: their own form. state.health is null when the database doesn't
+// have the table yet (the form is skipped), {} when not filled in.
+async function loadMyHealth() {
+  const { data, error } = await sb.from('client_health').select('*').eq('client_id', state.me.id).maybeSingle();
+  if (error) {
+    if (!isMissingTable(error)) toast(error.message, true);
+    state.health = null;
+    return;
+  }
+  state.health = data || {};
+}
+
+// Trainer: birthdays and screening flags for every client.
+async function loadHealthSummary() {
+  const { data, error } = await sb.from('client_health').select('client_id,birthday,screening,screening_flag,completed_at');
+  if (error) {
+    if (!isMissingTable(error)) toast(error.message, true);
+    state.healthByClient = null;
+    return;
+  }
+  state.healthByClient = new Map(data.map((r) => [r.client_id, r]));
+}
+
+function renderHealthForm({ first }) {
+  closeChat();
+  const hr = state.health || {};
+  const err = h('p', { class: 'error', role: 'alert' });
+  const birthday = h('input', { type: 'date', required: true, value: hr.birthday || '', min: '1900-01-01', max: today() });
+  const flagNote = h('div', { class: 'callout health-flag', hidden: true, role: 'status' },
+    h('p', {}, `Thanks for letting ${TRAINER_NAME} know. Before you start training, please check with your GP (or another health professional) that exercise is OK for you, and tell ${TRAINER_NAME} what they say. You can still use the app.`));
+  const radios = new Map();
+  const showFlag = () => { flagNote.hidden = ![...radios.values()].some((r) => r.yes.checked); };
+  const question = ([key, text], i) => {
+    const cur = hr.screening?.[key];
+    const yes = h('input', { type: 'radio', name: `screen-${key}`, value: 'yes', required: true, checked: cur === true || null, onchange: showFlag });
+    const no = h('input', { type: 'radio', name: `screen-${key}`, value: 'no', checked: cur === false || null, onchange: showFlag });
+    radios.set(key, { yes, no });
+    return h('fieldset', { class: 'screen-q' },
+      h('legend', {}, h('span', { class: 'screen-n' }, `${i + 1}.`), text),
+      h('div', { class: 'yn-row' },
+        h('label', { class: 'yn' }, yes, 'Yes'),
+        h('label', { class: 'yn' }, no, 'No')));
+  };
+  const texts = Object.fromEntries(HEALTH_TEXT.map(([key, , placeholder]) =>
+    [key, h('textarea', { rows: '3', maxlength: '3000', placeholder, value: hr[key] || '' })]));
+  const textFields = (section) => HEALTH_TEXT.filter((t) => t[3] === section).map(([key, label]) => field(label, texts[key]));
+  const pregnancy = h('select', {}, PREGNANCY.map(([v, label]) => h('option', { value: v, selected: (hr.pregnancy || '') === v || null }, label)));
+  const eName = h('input', { required: true, maxlength: '200', value: hr.emergency_name || '', autocomplete: 'off' });
+  const eRelation = h('input', { maxlength: '100', value: hr.emergency_relation || '', placeholder: 'e.g. Partner, Mum', autocomplete: 'off' });
+  const ePhone = h('input', { type: 'tel', required: true, maxlength: '50', value: hr.emergency_phone || '', autocomplete: 'off' });
+  const consent = h('input', { type: 'checkbox', required: true, checked: hr.completed_at ? true : null });
+  const save = h('button', { type: 'submit', class: 'btn primary' }, first ? 'Save and continue' : 'Save changes');
+  const back = () => { state.editHealth = false; renderClientApp(); };
+
+  const form = h('form', {
+    class: 'stack health-form',
+    onsubmit: async (e) => {
+      e.preventDefault();
+      err.textContent = '';
+      if (birthday.value > today()) { err.textContent = 'Check your birthday: it’s in the future.'; return; }
+      const screening = Object.fromEntries([...radios].map(([key, r]) => [key, r.yes.checked]));
+      const row = {
+        client_id: state.me.id,
+        birthday: birthday.value,
+        screening,
+        pregnancy: pregnancy.value,
+        ...Object.fromEntries(Object.entries(texts).map(([key, el]) => [key, el.value.trim()])),
+        emergency_name: eName.value.trim(),
+        emergency_relation: eRelation.value.trim(),
+        emergency_phone: ePhone.value.trim(),
+        completed_at: hr.completed_at || new Date().toISOString(),
+      };
+      save.disabled = true;
+      const { error } = await sb.from('client_health').upsert(row);
+      save.disabled = false;
+      if (error) { err.textContent = error.message; return; }
+      state.health = { ...hr, ...row };
+      state.editHealth = false;
+      toast(screeningYes(row).length
+        ? `Saved. Please check with your GP before training, and let ${TRAINER_NAME} know what they say.`
+        : first ? `Thanks! ${TRAINER_NAME} has your details.` : 'Your details are updated.');
+      renderClientApp();
+    },
+  },
+    h('section', { class: 'card' },
+      h('p', { class: 'eyebrow' }, '1 · About you'),
+      field('Your birthday', birthday, `So ${TRAINER_NAME} can wish you a happy birthday.`)),
+    h('section', { class: 'card' },
+      h('p', { class: 'eyebrow' }, '2 · Health check'),
+      h('p', { class: 'muted small' }, 'The standard Australian pre-exercise screening questions. Please answer every one.'),
+      SCREENING.map(question),
+      flagNote),
+    h('section', { class: 'card' },
+      h('p', { class: 'eyebrow' }, '3 · Injuries and medical'),
+      textFields('medical'),
+      field('Are you pregnant, or have you had a baby in the last 12 months?', pregnancy)),
+    h('section', { class: 'card' },
+      h('p', { class: 'eyebrow' }, '4 · Goals and lifestyle'),
+      textFields('goals')),
+    h('section', { class: 'card' },
+      h('p', { class: 'eyebrow' }, '5 · Emergency contact'),
+      field('Name', eName),
+      field('Relationship (optional)', eRelation),
+      field('Phone', ePhone)),
+    h('label', { class: 'consent' }, consent,
+      `The information I’ve given is true to the best of my knowledge, and I’ll tell ${TRAINER_NAME} if anything changes.`),
+    err,
+    h('div', { class: 'row-end actions' },
+      first ? null : h('button', { type: 'button', class: 'btn ghost', onclick: back }, 'Cancel'),
+      save));
+  mount(header(), h('main', { class: 'client-main health-page' },
+    first ? null : h('button', { class: 'btn ghost small back-link', onclick: back }, '← Back'),
+    h('h1', {}, first ? ['Welcome, ', h('em', {}, firstName(state.me.full_name))] : 'Your health details'),
+    h('p', { class: 'lead' }, first
+      ? `Before you start, ${TRAINER_NAME} needs a few details so your training is safe and suits you. It takes about 5 minutes.`
+      : `Keep these up to date so ${TRAINER_NAME} can plan around them.`),
+    h('p', { class: 'muted small' }, `Only you and ${TRAINER_NAME} can see your answers.`),
+    form));
+  showFlag();
+}
+
+// Home: a birthday message on their birthday.
+function birthdayCard() {
+  return h('section', { class: 'card birthday-card' },
+    h('p', { class: 'eyebrow' }, `From ${TRAINER_NAME}`),
+    h('h2', {}, 'Happy birthday, ', h('em', {}, firstName(state.me.full_name)), '!'),
+    h('p', {}, 'Wishing you a brilliant year ahead. Enjoy your day, and have the cake!'));
+}
+
+// Trainer: the client's answers, at the top of their Consult notes.
+function healthCard(c, hr) {
+  const first = firstName(c.full_name);
+  const bday = hr?.birthday ? `${formatDate(hr.birthday)} (age ${ageOn(hr.birthday, today())})` : null;
+  if (!hr?.completed_at) {
+    return h('section', { class: 'card health-card' },
+      h('p', { class: 'eyebrow' }, 'Health form · private'),
+      h('h4', {}, 'Not filled in yet'),
+      h('p', { class: 'muted small' }, c.email
+        ? `${first} will be asked to fill it in next time they sign in.`
+        : `${first} will fill it in when they first sign in, once you’ve added their email.`),
+      h('p', { class: 'small' }, bday ? `Birthday: ${bday}` : 'Add their birthday in Edit client to see it on your calendar.'));
+  }
+  const yes = screeningYes(hr);
+  const row = (label, value) => [h('dt', {}, label), h('dd', {}, value || '—')];
+  const phone = hr.emergency_phone ? h('a', { href: `tel:${hr.emergency_phone.replace(/[^\d+]/g, '')}` }, hr.emergency_phone) : null;
+  return h('section', { class: 'card health-card' },
+    h('div', { class: 'row-between' },
+      h('p', { class: 'eyebrow' }, 'Health form · private'),
+      h('span', { class: 'muted small' }, `Filled in ${formatDate(dayKey(new Date(hr.completed_at)))}`)),
+    h('h4', {}, `From ${first}`),
+    yes.length
+      ? h('div', { class: 'callout health-flag' }, h('div', {},
+          h('p', { class: 'eyebrow' }, `Screening: yes to ${yes.length} question${yes.length === 1 ? '' : 's'}`),
+          h('ul', {}, yes.map(([, q]) => h('li', {}, q))),
+          h('p', { class: 'small' }, 'APSS: they should get clearance from their GP or an allied health professional before training.')))
+      : h('p', { class: 'small' }, `Screening: no to all ${SCREENING.length} questions.`),
+    h('dl', { class: 'health-list' },
+      row('Birthday', bday),
+      HEALTH_TEXT.map(([key, label]) => row(label, hr[key])),
+      row('Pregnancy', hr.pregnancy ? PREGNANCY.find(([v]) => v === hr.pregnancy)?.[1] : null),
+      row('Emergency contact', hr.emergency_name ? [hr.emergency_name, hr.emergency_relation ? ` (${hr.emergency_relation})` : '', phone ? ' · ' : '', phone] : null)));
+}
+
+// Plain-text version for "Copy notes".
+function healthText(hr) {
+  if (!hr?.completed_at) return hr?.birthday ? `## Health form\nNot filled in yet. Birthday: ${hr.birthday}` : '## Health form\nNot filled in yet.';
+  const yes = screeningYes(hr);
+  return [
+    '## Health form (from the client)',
+    `Screening (APSS): ${yes.length ? `YES to: ${yes.map(([, q]) => q).join(' / ')}` : 'no to all questions'}`,
+    `Age: ${hr.birthday ? ageOn(hr.birthday, today()) : 'unknown'}`,
+    ...HEALTH_TEXT.map(([key, label]) => `${label}: ${hr[key] || '(none)'}`),
+    `Pregnancy: ${PREGNANCY.find(([v]) => v === (hr.pregnancy || ''))?.[1]}`,
+  ].join('\n');
+}
+
+// ---------------------------------------------------------------------------
 // Trainer: private consult notes
 // ---------------------------------------------------------------------------
 
@@ -505,8 +760,13 @@ const NOTE_FIELDS = [
 
 async function renderConsultNotes(body, c) {
   body.replaceChildren(h('p', { class: 'muted' }, 'Loading…'));
-  const { data, error } = await sb.from('client_notes').select('*').eq('client_id', c.id).maybeSingle();
+  const [{ data, error }, healthRes] = await Promise.all([
+    sb.from('client_notes').select('*').eq('client_id', c.id).maybeSingle(),
+    state.healthByClient ? sb.from('client_health').select('*').eq('client_id', c.id).maybeSingle() : { data: undefined },
+  ]);
   if (!body.isConnected) return;
+  if (healthRes.error) toast(healthRes.error.message, true);
+  const health = state.healthByClient ? healthRes.data || {} : null;
   if (error) { body.replaceChildren(h('p', { class: 'error' }, error.message)); return; }
   const notes = data || {};
   const first = firstName(c.full_name);
@@ -544,7 +804,8 @@ async function renderConsultNotes(body, c) {
       `Consult date: ${inputs.consult_date.value ? formatDate(inputs.consult_date.value) : 'not set'}`,
       ...NOTE_FIELDS.map(([key, label]) => `## ${label}\n${inputs[key].value.trim() || '(none)'}`),
       `## Goals shown to ${first}\n${goals.value.trim() || '(none yet)'}`,
-    ].join('\n\n');
+      health ? healthText(health) : null,
+    ].filter(Boolean).join('\n\n');
     try {
       await navigator.clipboard.writeText(text);
       toast('Notes copied. Paste them into a chat with Claude to plan workouts or polish the goals.');
@@ -553,7 +814,8 @@ async function renderConsultNotes(body, c) {
     }
   };
 
-  body.replaceChildren(h('div', { class: 'stack' },
+  fill(body, h('div', { class: 'stack' },
+    health ? healthCard(c, health) : null,
     h('section', { class: 'card notes-card' },
       h('div', { class: 'row-between' }, h('p', { class: 'eyebrow' }, 'Private · only you see this'), status),
       h('h4', {}, 'Initial consult'),
@@ -905,6 +1167,9 @@ function workoutCard(w, { actions = [], onChange, trainerFor, maxes = [], logs =
 
 function renderClientApp() {
   closeChat();
+  // The health form comes first, before anything else in the app.
+  if (state.health && !state.health.completed_at) return renderHealthForm({ first: true });
+  if (state.editHealth) return renderHealthForm({ first: false });
   if (state.activeWorkout) return renderWorkoutPage();
   if (state.activeProgram) return renderProgramPage();
   if (state.tab === 'sessions') state.tab = 'calendar'; // sessions now live on the calendar
@@ -1328,6 +1593,7 @@ async function renderClientHome(body) {
 
   fill(body,
     h('div', { class: 'stack home' },
+      isBirthdayOn(state.health?.birthday, todayK) ? birthdayCard() : null,
       state.me.goals ? goalsBox('Your goals', state.me.goals) : null,
       offerCard,
       todayCard,
@@ -1335,7 +1601,9 @@ async function renderClientHome(body) {
       sessionCard_,
       noticesBlock,
       winsPreview(latestWins),
-      consistency));
+      consistency,
+      state.health ? h('p', { class: 'muted small home-foot' },
+        h('button', { class: 'link', onclick: () => { state.editHealth = true; renderClientApp(); } }, 'Update my health details')) : null));
   // Bar heights as a share of the tallest week (set here, not inline in the markup).
   for (const el of body.querySelectorAll('[data-h]')) el.style.height = `${(Number(el.dataset.h) / maxBar) * 100}%`;
   if (thisWeek.hit) celebrateWeek(stats);
@@ -2331,7 +2599,7 @@ function upcomingLabel(sessions) {
 const hoursUntil = (x) => (new Date(x.starts_at) - new Date()) / 3600000;
 
 // A month grid (Monday first) with a dot for each session on a day.
-function calendarGrid(sessions, onChange) {
+function calendarGrid(sessions, onChange, birthdays = () => []) {
   const now = new Date();
   if (!state.cal.month) state.cal.month = new Date(now.getFullYear(), now.getMonth(), 1);
   if (!state.cal.day) state.cal.day = dayKey(now);
@@ -2360,14 +2628,16 @@ function calendarGrid(sessions, onChange) {
         const k = dayKey(d);
         const list = byDay.get(k) || [];
         const booked = list.filter((x) => x.status === 'booked').length;
+        const bdays = birthdays(k);
         return h('button', {
           type: 'button',
-          class: 'cal-day' + (d.getMonth() !== month.getMonth() ? ' other-month' : '') + (k === dayKey(now) ? ' today' : '') + (k === state.cal.day ? ' selected' : ''),
+          class: 'cal-day' + (d.getMonth() !== month.getMonth() ? ' other-month' : '') + (k === dayKey(now) ? ' today' : '') + (k === state.cal.day ? ' selected' : '') + (bdays.length ? ' has-birthday' : ''),
           'aria-pressed': String(k === state.cal.day),
-          'aria-label': `${d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}${list.length ? `, ${booked} session${booked === 1 ? '' : 's'}${list.length > booked ? `, ${list.length - booked} cancelled` : ''}` : ''}`,
+          'aria-label': `${d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}${list.length ? `, ${booked} session${booked === 1 ? '' : 's'}${list.length > booked ? `, ${list.length - booked} cancelled` : ''}` : ''}${bdays.length ? `, birthday: ${bdays.map((c) => c.full_name).join(', ')}` : ''}`,
           onclick: () => { state.cal.day = k; onChange(); },
         },
           h('span', { class: 'cal-num' }, String(d.getDate())),
+          bdays.length ? h('span', { class: 'cal-bday', 'aria-hidden': 'true' }, '✦') : null,
           list.length ? h('span', { class: 'cal-dots', 'aria-hidden': 'true' },
             list.slice(0, 3).map((x) => h('span', { class: 'cal-dot' + (x.status === 'cancelled' ? ' cancelled' : '') }))) : null);
       })));
@@ -2494,6 +2764,14 @@ async function renderSessions(body, { client, asTrainer }) {
   const onDay = mine.filter((x) => dayKey(new Date(x.starts_at)) === (state.cal.day || dayKey(now)));
   const rerender = () => renderSessions(body, { client, asTrainer });
   const selectedLabel = new Date(`${state.cal.day || dayKey(now)}T12:00`).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+  // The trainer's main calendar also shows every client's birthday.
+  const showBirthdays = asTrainer && !client && state.healthByClient;
+  const bdayFn = showBirthdays ? birthdaysOn : () => [];
+  const bdayLine = (c, k) => h('li', {}, h('b', {}, `${firstName(c.full_name)}’s birthday`), ` · turns ${turnsOn(state.healthByClient.get(c.id).birthday, k)}`);
+  const dayBdays = bdayFn(state.cal.day || dayKey(now));
+  const month = state.cal.month || new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthDays = Array.from({ length: new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate() }, (_, i) => dayKey(new Date(month.getFullYear(), month.getMonth(), i + 1)));
+  const monthBdays = showBirthdays ? monthDays.flatMap((k) => bdayFn(k).map((c) => ({ c, k }))) : [];
 
   fill(body,
     h('div', { class: 'row-between' },
@@ -2504,10 +2782,19 @@ async function renderSessions(body, { client, asTrainer }) {
       : h('p', { class: 'muted' }, asTrainer ? 'No upcoming sessions booked.' : `No upcoming sessions. ${TRAINER_NAME} will book them here.`),
     h('h3', {}, 'Calendar'),
     h('div', { class: 'cal-wrap' },
-      calendarGrid(mine, rerender),
+      calendarGrid(mine, rerender, bdayFn),
       h('div', { class: 'cal-day-list' },
         h('p', { class: 'eyebrow' }, selectedLabel),
-        onDay.length ? h('div', { class: 'stack' }, onDay.map(card)) : h('p', { class: 'muted small' }, 'Nothing booked on this day.'))));
+        dayBdays.length ? h('ul', { class: 'bday-list today-bdays' }, dayBdays.map((c) => bdayLine(c, state.cal.day || dayKey(now)))) : null,
+        onDay.length ? h('div', { class: 'stack' }, onDay.map(card)) : h('p', { class: 'muted small' }, 'Nothing booked on this day.'))),
+    showBirthdays ? h('section', { class: 'month-bdays' },
+      h('h3', {}, `Birthdays in ${month.toLocaleDateString(undefined, { month: 'long' })}`),
+      monthBdays.length
+        ? h('ul', { class: 'bday-list' }, monthBdays.map(({ c, k }) => h('li', {},
+            h('span', { class: 'bday-date' }, dateOf(k).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' })),
+            h('b', {}, c.full_name),
+            ` turns ${turnsOn(state.healthByClient.get(c.id).birthday, k)}`)))
+        : h('p', { class: 'muted small' }, 'No client birthdays this month.')) : null);
 }
 
 async function deleteSession(x, onDone) {
@@ -2525,7 +2812,7 @@ function renderCalendarPanel() {
       h('button', { class: 'btn ghost small back', onclick: () => { state.view = 'client'; renderClientList(); renderPanel(); } }, '← Clients'),
       h('div', { class: 'panel-title' },
         h('h2', {}, 'Calendar'),
-        h('p', { class: 'muted small' }, 'All booked sessions. Clients can cancel their own; you get a message in their chat when they do.'))),
+        h('p', { class: 'muted small' }, 'All booked sessions and client birthdays (✦). Clients can cancel their own sessions; you get a message in their chat when they do.'))),
     body);
   renderSessions(body, { client: null, asTrainer: true });
 }
