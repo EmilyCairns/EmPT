@@ -5,7 +5,7 @@ const { SUPABASE_URL, SUPABASE_ANON_KEY, APP_NAME, TRAINER_NAME } = config;
 // Optional settings: older config.js files may not have them.
 const ROUND_TO_KG = Number(config.ROUND_TO_KG) > 0 ? Number(config.ROUND_TO_KG) : 2.5;
 // Plates in the gym, heaviest first, and the bars to choose from.
-const PLATES_KG = (Array.isArray(config.PLATES_KG) && config.PLATES_KG.length ? config.PLATES_KG : [25, 20, 15, 10, 5, 2.5, 1.25])
+const PLATES_KG = (Array.isArray(config.PLATES_KG) && config.PLATES_KG.length ? config.PLATES_KG : [20, 15, 10, 5, 2.5, 1.25])
   .map(Number).filter((n) => n > 0).sort((a, b) => b - a);
 const BARS_KG = [20, 15];
 const LATE_CANCEL_HOURS = Number(config.LATE_CANCEL_HOURS) >= 0 && config.LATE_CANCEL_HOURS != null ? Number(config.LATE_CANCEL_HOURS) : 24;
@@ -1799,12 +1799,7 @@ function restTimer() {
 }
 
 // Which plates go on each side of the bar.
-// Many gyms (Revo included) have no 25 kg plates, so they're off unless the
-// client turns them on in the plate helper. The choice is kept on the phone.
-const uses25 = () => remember('plates-25') === true;
-const availablePlates = () => PLATES_KG.filter((p) => p !== 25 || uses25());
-
-function platesFor(total, bar, available = availablePlates()) {
+function platesFor(total, bar, available = PLATES_KG) {
   if (!(total > 0)) return null;
   if (total < bar) return { tooLight: true };
   let side = (total - bar) / 2;
@@ -1880,13 +1875,13 @@ function barbellPicture(plates, bar) {
   return svgEl('svg', { viewBox: `0 0 ${W.toFixed(1)} ${H.toFixed(1)}`, class: 'barbell-svg', 'aria-hidden': 'true', focusable: 'false' }, parts);
 }
 
-// "20 kg bar", "2 × 25 kg plates each side", … heaviest first.
+// "20 kg bar", "2 × 20 kg plates", … heaviest first (per side; the caption says so).
 function plateLines(plates, bar) {
   const counts = new Map();
   for (const p of plates) counts.set(p, (counts.get(p) || 0) + 1);
   return [
     `${bar} kg bar`,
-    ...[...counts].map(([p, n]) => `${n} × ${p} kg plate${n === 1 ? '' : 's'} each side`),
+    ...[...counts].map(([p, n]) => `${n} × ${p} kg plate${n === 1 ? '' : 's'}`),
   ];
 }
 
@@ -1900,23 +1895,14 @@ function plateCalculator(signal) {
     'aria-pressed': String(barChoice() === b),
     onclick: () => { remember('bar-kg', b); document.dispatchEvent(new Event('empt-bar-change')); },
   }, `${b} kg bar`));
-  const has25 = PLATES_KG.includes(25);
-  const toggle25 = has25 ? h('button', {
-    type: 'button',
-    class: 'plate25-toggle',
-    title: 'Turn on if your gym has 25 kg plates',
-    onclick: () => { remember('plates-25', !uses25()); document.dispatchEvent(new Event('empt-bar-change')); },
-  }, '25 kg plates') : null;
   let current = null;
   const el = h('div', { class: 'plates' },
-    h('div', { class: 'row-between' }, h('p', { class: 'eyebrow' }, 'Plates'), toggle25),
-    h('div', { class: 'chips', role: 'group', 'aria-label': 'Bar weight' }, toggles),
+    h('div', { class: 'row-between' }, h('p', { class: 'eyebrow' }, 'Plates'), h('div', { class: 'chips', role: 'group', 'aria-label': 'Bar weight' }, toggles)),
     body);
   function update(kgValue) {
     current = Number(kgValue) > 0 ? Number(kgValue) : null;
     const bar = barChoice();
     toggles.forEach((t, i) => t.setAttribute('aria-pressed', String(BARS_KG[i] === bar)));
-    toggle25?.setAttribute('aria-pressed', String(uses25()));
     if (current == null) {
       fill(body, h('p', { class: 'muted small' }, 'Enter a weight to see which plates to load.'));
       return;
@@ -1927,7 +1913,7 @@ function plateCalculator(signal) {
       return;
     }
     fill(body,
-      h('div', { class: 'plates-picture' }, barbellPicture(r.plates, bar), h('p', { class: 'plates-caption' }, 'One side shown')),
+      h('div', { class: 'plates-picture' }, barbellPicture(r.plates, bar), h('p', { class: 'plates-caption' }, 'One side shown. Make sure both sides are the same.')),
       h('div', { class: 'plates-list' },
         h('p', { class: 'plates-total' }, kg(r.exact ? current : r.loaded)),
         h('ul', {}, plateLines(r.plates, bar).map((line) => h('li', {}, line))),

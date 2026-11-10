@@ -19,5 +19,6 @@ export const ROUND_TO_KG = 2.5;
 export const LATE_CANCEL_HOURS = 24;
 
 // Plates available in your gym (kg, per plate). Used by the plate
-// calculator on barbell exercises. Remove any you don't have.
-export const PLATES_KG = [25, 20, 15, 10, 5, 2.5, 1.25];
+// calculator on barbell exercises. Remove any you don't have. No 25 kg
+// plates for now: most clients train at Revo, which doesn't have them.
+export const PLATES_KG = [20, 15, 10, 5, 2.5, 1.25];
