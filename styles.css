@@ -723,7 +723,13 @@ input[type="checkbox"], input[type="radio"] {
 
 /* Trainer: a client's streak, high five and rest weeks. */
 .streak-card .row-between .eyebrow { margin: 0; }
-.streak-line { margin: var(--space-2) 0 0; font-size: var(--text-body-lg); }
+.streak-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); margin: 0; font-size: var(--text-body-lg); }
+.streak-line .badge { margin: 0; align-self: center; }
+.streak-more { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); margin-top: var(--space-2); }
+.streak-more > details { flex: 1 1 100%; }
+.streak-more > details:not([open]) { flex: 0 0 auto; }
+.streak-more summary { cursor: pointer; width: fit-content; font-size: var(--text-body-sm); font-weight: var(--weight-semibold); text-decoration: underline; text-underline-offset: var(--space-1); }
+.streak-more .rest-weeks { margin-top: 0; }
 .streak-line b { font-family: var(--font-display); font-size: var(--text-heading); font-weight: var(--weight-regular); }
 .rest-weeks { margin-top: var(--space-4); }
 .rest-weeks summary { cursor: pointer; width: fit-content; font-weight: var(--weight-semibold); text-decoration: underline; text-underline-offset: var(--space-1); }
@@ -991,7 +997,7 @@ body.is-dragging { cursor: grabbing; -webkit-user-select: none; user-select: non
 .workout-page .card.log-ex { padding: var(--space-6); border-top: 0; }
 .workout-page .log-ex h2 { margin: 0 0 var(--space-1); }
 /* The exercise name: big terracotta serif, and a link to that lift's history. */
-.ex-title {
+button.ex-title {
   display: inline-flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -1008,8 +1014,8 @@ body.is-dragging { cursor: grabbing; -webkit-user-select: none; user-select: non
   text-align: left;
   cursor: pointer;
 }
-.ex-title:hover { text-decoration: underline; text-decoration-thickness: var(--border-width); text-underline-offset: var(--space-1); }
-.ex-title:focus-visible { outline: var(--border-width-strong) solid var(--color-focus); outline-offset: var(--space-1); border-radius: var(--radius-nav); }
+button.ex-title:hover { text-decoration: underline; text-decoration-thickness: var(--border-width); text-underline-offset: var(--space-1); }
+button.ex-title:focus-visible { outline: var(--border-width-strong) solid var(--color-focus); outline-offset: var(--space-1); border-radius: var(--radius-nav); }
 .ex-title-more { font-family: var(--font-body); font-size: var(--text-body-sm); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-body); white-space: nowrap; }
 /* Last time's numbers for a set, right under its inputs. */
 .set-prev { grid-column: 2 / -1; margin: calc(-1 * var(--space-1)) 0 var(--space-1); color: var(--color-text-muted); font-size: var(--text-body-sm); text-align: left; }
@@ -1423,3 +1429,69 @@ button.link:focus-visible { outline: var(--border-width-strong) solid var(--colo
 /* "Your progress" is a row with no heading: its icon gets the full badge. */
 .home-row > .row-icon:first-child:not(:has(+ .home-when)) { width: var(--control-height-sm); height: var(--control-height-sm); border: 0; background: var(--color-surface-raised); }
 .home-row > .row-icon:first-child:not(:has(+ .home-when)) .icon { width: var(--space-5); height: var(--space-5); }
+
+/* Trainer sidebar: icons on the top links, then search and sort. */
+.nav-item { flex-direction: row; align-items: center; gap: var(--space-3); }
+.nav-text { display: flex; flex-direction: column; min-width: 0; }
+.nav-icon { display: grid; place-items: center; flex: none; width: var(--space-8); height: var(--space-8); border-radius: var(--radius-pills); background: var(--color-surface-raised); color: var(--color-accent-text); }
+.nav-icon .icon { width: var(--space-4); height: var(--space-4); }
+.nav-item.active .nav-icon { background: var(--color-accent); color: var(--color-on-accent); }
+.client-tools { display: grid; grid-template-columns: 1fr auto; gap: var(--space-2); padding: 0 var(--space-6) var(--space-3); }
+.client-tools input, .client-tools select { min-width: 0; height: var(--control-height-sm); font-size: var(--text-body-sm); }
+.client-item .client-flags { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The line under a client's name on their page. */
+.client-summary { margin: var(--space-1) 0 0; color: var(--color-text-body); font-size: var(--text-body-sm); font-weight: var(--weight-semibold); }
+/* Today page. */
+.today-panel { margin-top: var(--space-6); }
+
+/* Trainer workouts: groups of compact rows that open into the full card. */
+.tw-group > .row-between { margin: var(--space-6) 0 var(--space-2); }
+.tw-group h4.eyebrow { margin: 0; font-family: var(--font-body); font-size: var(--text-eyebrow); }
+.tw-list { border-top: var(--border-width) solid var(--color-border); }
+.tw { border-bottom: var(--border-width) solid var(--color-border); }
+.tw > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: var(--control-height);
+  padding: var(--space-3) var(--space-2);
+  cursor: pointer;
+  list-style: none;
+}
+.tw > summary::-webkit-details-marker { display: none; }
+.tw > summary:hover { background: var(--color-surface-raised); }
+.tw > summary:focus-visible { outline: var(--border-width-strong) solid var(--color-focus); outline-offset: calc(-1 * var(--border-width-strong)); }
+.tw-when { flex: none; width: var(--space-16); color: var(--color-accent-text); font-size: var(--text-body-sm); font-weight: var(--weight-semibold); }
+.tw-what { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: var(--space-1); }
+.tw-status { flex: none; color: var(--color-text-muted); font-family: var(--font-mono); font-size: var(--text-mono); text-transform: uppercase; }
+.tw.is-done .tw-status { color: var(--color-accent-text); }
+.tw.is-missed .tw-status { color: var(--color-text); font-weight: var(--weight-bold); }
+.tw.is-draft .tw-what b { color: var(--color-text-muted); }
+.tw[open] > summary { background: var(--color-surface-raised); }
+.tw-body { padding: var(--space-2) 0 var(--space-4); }
+.tw-past { margin-top: var(--space-6); }
+.tw-past > summary { cursor: pointer; width: fit-content; margin-bottom: var(--space-2); font-weight: var(--weight-semibold); text-decoration: underline; text-underline-offset: var(--space-1); }
+/* "+ New" menu. */
+.new-menu { position: relative; }
+.new-menu > summary { list-style: none; }
+.new-menu > summary::-webkit-details-marker { display: none; }
+.new-menu .menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--space-2));
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  min-width: calc(var(--sidebar-width) * 0.75);
+  padding: var(--space-2);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-nav);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-xl);
+}
+.new-menu .menu button { padding: var(--space-3); border: 0; border-radius: var(--radius-nav); background: none; color: var(--color-text); font: inherit; font-weight: var(--weight-semibold); text-align: left; cursor: pointer; }
+.new-menu .menu button:hover, .new-menu .menu button:focus-visible { background: var(--color-surface-raised); }
+@media (max-width: 760px) {
+  .tw-status { display: none; }
+  .tw > summary { gap: var(--space-3); padding-inline: 0; }
+}

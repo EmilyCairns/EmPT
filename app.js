@@ -282,6 +282,8 @@ const payLabel = (clientId) => {
 
 async function startTrainer() {
   await Promise.all([loadClients(), loadLibrary(), loadNotices(), loadSessions(), loadCommunity(), loadHealthSummary()]);
+  await loadOverview();
+  state.view = 'today';
   // Hear about new client messages anywhere in the app.
   state.inboxChannel = sb.channel(`inbox-${Date.now()}`)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, ({ new: m }) => {
@@ -294,7 +296,8 @@ async function startTrainer() {
           if (state.view === 'calendar' || (state.view === 'client' && state.tab === 'sessions')) renderPanel();
         });
       }
-      if (state.selectedId === m.client_id && state.tab === 'chat') return;
+      state.overview?.lastMsg.set(m.client_id, m);
+      if (state.selectedId === m.client_id && state.tab === 'chat') { renderClientList(); return; }
       state.unread.add(m.client_id);
       renderClientList();
       toast(cancelled ? `${clientName(m.client_id)} cancelled a session. See their chat for details.` : `New message from ${clientName(m.client_id)}`);
@@ -312,6 +315,17 @@ function renderTrainerApp() {
       h('div', { class: 'sidebar-head' },
         h('h2', { class: 'eyebrow' }, 'Clients'),
         h('button', { class: 'btn primary small', onclick: () => openClientDialog() }, '+ New client')),
+      h('div', { class: 'client-tools' },
+        h('input', {
+          type: 'search', placeholder: 'Search clients', 'aria-label': 'Search clients', value: state.clientQuery || '',
+          oninput: (e) => { state.clientQuery = e.target.value; renderClientList(); },
+        }),
+        h('select', {
+          'aria-label': 'Sort clients',
+          onchange: (e) => { remember('client-sort', e.target.value); renderClientList(); },
+        },
+          h('option', { value: 'az', selected: (remember('client-sort') || 'az') === 'az' || null }, 'A–Z'),
+          h('option', { value: 'attention', selected: remember('client-sort') === 'attention' || null }, 'Needs you first'))),
       ui.list),
     ui.panel);
   mount(header(), ui.layout);
@@ -321,36 +335,48 @@ function renderTrainerApp() {
 
 function renderClientList() {
   ui.layout.classList.toggle('has-selection', !!state.selectedId || state.view !== 'client');
-  const navItem = (view, title, detail) => h('button', {
-    class: 'client-item' + (state.view === view ? ' active' : ''),
+  const navItem = (view, iconName, title, detail, active = state.view === view) => h('button', {
+    class: 'client-item nav-item' + (active ? ' active' : ''),
     onclick: () => { flushPendingSaves(); state.view = view; state.selectedId = null; renderClientList(); renderPanel(); },
-  }, h('span', { class: 'client-name' }, title), h('span', { class: 'muted small' }, detail));
+  }, h('span', { class: 'nav-icon' }, icon(iconName)),
+    h('span', { class: 'nav-text' }, h('span', { class: 'client-name' }, title), h('span', { class: 'muted small' }, detail)));
+  const needing = state.overview ? state.clients.filter((c) => clientAttention(c, clientSummary(c)).length).length : 0;
   fill(ui.libNav,
-    state.lifting ? navItem('library', 'Exercise library', `${state.library.length} exercise${state.library.length === 1 ? '' : 's'}`) : null,
-    state.sessions ? navItem('calendar', 'Calendar', upcomingLabel(state.sessions)) : null,
-    state.notices ? navItem('notices', 'Notice board', `${state.notices.length} post${state.notices.length === 1 ? '' : 's'}`) : null,
-    state.community ? navItem('community', 'Team wins', `${state.community.members.size} sharing`) : null);
+    navItem('today', 'sun', 'Today', needing ? `${plural(needing, 'client')} need${needing === 1 ? 's' : ''} you` : 'All caught up', state.view === 'today'),
+    state.lifting ? navItem('library', 'dumbbell', 'Exercise library', plural(state.library.length, 'exercise')) : null,
+    state.sessions ? navItem('calendar', 'calendar', 'Calendar', upcomingLabel(state.sessions)) : null,
+    state.notices ? navItem('notices', 'megaphone', 'Notice board', plural(state.notices.length, 'post')) : null,
+    state.community ? navItem('community', 'trophy', 'Team wins', `${state.community.members.size} sharing`) : null);
   ui.libNav.hidden = !ui.libNav.children.length;
   if (!state.clients.length) {
     ui.list.replaceChildren(h('p', { class: 'muted pad' }, 'No clients yet. Tap "+ New client" to start their consult notes.'));
     return;
   }
-  ui.list.replaceChildren(...state.clients.map((c) =>
+  // Search and sort (the sort is remembered on this device).
+  const q = (state.clientQuery || '').trim().toLowerCase();
+  const sort = remember('client-sort') || 'az';
+  const rows = state.clients
+    .filter((c) => !q || c.full_name.toLowerCase().includes(q) || (c.email || '').toLowerCase().includes(q))
+    .map((c) => {
+      const s = clientSummary(c);
+      return { c, s, attention: clientAttention(c, s) };
+    });
+  if (sort === 'attention') rows.sort((a, b) => b.attention.length - a.attention.length || a.c.full_name.localeCompare(b.c.full_name));
+  ui.list.replaceChildren(...(rows.length ? rows.map(({ c, s, attention }) =>
     h('button', {
       class: 'client-item' + (c.id === state.selectedId ? ' active' : ''),
       onclick: () => selectClient(c.id),
     },
       h('span', { class: 'client-name' }, c.full_name, state.unread.has(c.id) ? h('span', { class: 'dot', title: 'New message' }) : null),
-      h('span', { class: 'muted small' }, [c.email || 'No account yet', payLabel(c.id)].filter(Boolean).join(' · ')),
-      clientFlags(c))));
+      h('span', { class: 'muted small' }, clientStatus(c, s)),
+      clientFlags(c, s, attention))) : [h('p', { class: 'muted pad' }, `No clients match "${state.clientQuery}".`)]));
 }
 
-// Small terracotta notes under a client's name: birthday today, health check.
-function clientFlags(c) {
-  const hr = state.healthByClient?.get(c.id);
+// Small terracotta notes under a client's name.
+function clientFlags(c, s, attention) {
   const flags = [
-    isBirthdayOn(hr?.birthday, today()) ? 'Birthday today' : null,
-    hr?.completed_at && healthFlag(hr) ? 'Health check: see notes' : null,
+    s?.nextBirthday === today() ? 'Birthday today' : null,
+    ...(attention || []).map(([label]) => (label.startsWith('Health check') ? 'Health check' : label)),
   ].filter(Boolean);
   return flags.length ? h('span', { class: 'client-flags' }, flags.join(' · ')) : null;
 }
@@ -406,6 +432,7 @@ function renderPanel() {
   if (state.view === 'notices') return renderNoticesPanel();
   if (state.view === 'calendar') return renderCalendarPanel();
   if (state.view === 'community') return renderCommunityPanel();
+  if (state.view === 'today') return renderTodayPanel();
   const c = state.clients.find((x) => x.id === state.selectedId);
   if (!c) {
     ui.panel.replaceChildren(h('div', { class: 'empty' }, h('p', { class: 'muted' }, 'Choose a client to see their notes, workouts and chat.')));
@@ -428,7 +455,8 @@ function renderPanel() {
       }, '← Clients'),
       h('div', { class: 'panel-title' },
         h('h2', {}, c.full_name),
-        h('p', { class: 'muted small' }, [c.email || 'No account yet', payLabel(c.id)].filter(Boolean).join(' · '))),
+        h('p', { class: 'muted small' }, [c.email || 'No account yet', payLabel(c.id)].filter(Boolean).join(' · ')),
+        clientSummaryLine(c)),
       h('button', { class: 'btn ghost small', onclick: () => openClientDialog(c) }, 'Edit client')),
     hasAccount ? null : h('div', { class: 'callout' },
       h('div', {},
@@ -502,6 +530,7 @@ function openClientDialog(c, { focusEmail = false } = {}) {
         else await loadHealthSummary();
       }
       await loadClients();
+      state.view = 'client';
       state.selectedId = data.id;
       if (!c) state.tab = 'notes';
       renderClientList();
@@ -863,13 +892,20 @@ function trainerStreakCard(c, workouts, excused, refresh) {
           }, isRest ? 'Undo' : 'Make rest week'));
       })));
   }
+  // One line by default; seals and rest weeks are a tap away.
   return h('section', { class: 'card streak-card' },
-    h('div', { class: 'row-between' }, h('p', { class: 'eyebrow' }, 'Streak'), highFive),
-    h('p', { class: 'streak-line' }, h('b', {}, String(stats.streak)), ` ${stats.streak === 1 ? 'week' : 'weeks'} in a row · best ${stats.best}`),
-    stats.justSealed ? h('p', { class: 'badge' }, `Just earned the ${stats.streak}-week seal`) : null,
-    sealRow(stats),
-    h('p', { class: 'muted small' }, nextSealText(stats).replace('your', 'the')),
-    restWeeks);
+    h('div', { class: 'row-between' },
+      h('p', { class: 'streak-line' },
+        stats.streak ? [h('b', {}, String(stats.streak)), ` ${stats.streak === 1 ? 'week' : 'weeks'} in a row`] : 'No current streak',
+        stats.best ? ` · best ${stats.best}` : '',
+        stats.justSealed ? h('span', { class: 'badge' }, `Just earned the ${stats.streak}-week seal`) : null),
+      highFive),
+    h('div', { class: 'streak-more' },
+      h('details', {},
+        h('summary', {}, 'Seals'),
+        sealRow(stats),
+        h('p', { class: 'muted small' }, nextSealText(stats).replace('your', 'the'))),
+      restWeeks));
 }
 
 // A quick message of encouragement, sent into the client's chat.
@@ -896,29 +932,286 @@ function openHighFive(c, stats) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Trainer: overview data for every client (Today page, client list, summaries)
+// ---------------------------------------------------------------------------
+
+// Loads what the Today page and client list need in one go. Anything the
+// database doesn't have yet is simply treated as empty.
+async function loadOverview() {
+  const quiet = (res) => (res.error ? (isMissingTable(res.error) ? [] : (toast(res.error.message, true), [])) : res.data);
+  const [wRes, eRes, mRes, fRes, pbRes] = await Promise.all([
+    sb.from('workouts').select('id,client_id,title,workout_date,completed_at,is_draft,program_id,program_week'),
+    sb.from('excused_weeks').select('client_id,week_start'),
+    sb.from('messages').select('client_id,sender,created_at').order('created_at', { ascending: false }).limit(1000),
+    sb.from('workout_feedback').select('*'),
+    sb.from('client_maxes').select('client_id,exercise_id,reps,weight_kg,tested_on,source,created_at').eq('source', 'logged').order('created_at', { ascending: false }).limit(40),
+  ]);
+  if (wRes.error) { toast(wRes.error.message, true); state.overview = null; return; }
+  const excused = new Map();
+  for (const r of quiet(eRes)) {
+    if (!excused.has(r.client_id)) excused.set(r.client_id, new Set());
+    excused.get(r.client_id).add(r.week_start);
+  }
+  // Newest message per client: if it's theirs, they're waiting for a reply.
+  const lastMsg = new Map();
+  for (const m of [...quiet(mRes)].sort((a, b) => b.created_at.localeCompare(a.created_at))) if (!lastMsg.has(m.client_id)) lastMsg.set(m.client_id, m);
+  state.overview = {
+    workouts: wRes.data,
+    excused,
+    lastMsg,
+    feedback: new Map(quiet(fRes).map((f) => [f.workout_id, f])),
+    pbs: quiet(pbRes),
+  };
+}
+
+// Everything worth knowing about one client at a glance.
+function clientSummary(c) {
+  const o = state.overview;
+  if (!o) return null;
+  const todayK = today();
+  const weekStart = mondayKey(todayK);
+  const all = o.workouts.filter((w) => w.client_id === c.id);
+  const ws = all.filter((w) => !w.is_draft);
+  const byDate = (a, b) => (a.workout_date || '').localeCompare(b.workout_date || '');
+  const last = ws.filter((w) => w.completed_at).sort((a, b) => b.completed_at.localeCompare(a.completed_at))[0] || null;
+  const lastPlanned = ws.map((w) => w.workout_date).filter(Boolean).sort().at(-1) || null;
+  const hr = state.healthByClient?.get(c.id);
+  let nextBirthday = null;
+  for (let d = 0; hr?.birthday && d <= 31 && !nextBirthday; d++) if (isBirthdayOn(hr.birthday, addDays(todayK, d))) nextBirthday = addDays(todayK, d);
+  return {
+    stats: ws.length ? streakStats(ws, o.excused.get(c.id) || new Set(), todayK) : null,
+    last,
+    lastFb: last ? o.feedback.get(last.id) || null : null,
+    next: ws.filter((w) => !w.completed_at && w.workout_date && w.workout_date >= todayK).sort(byDate)[0] || null,
+    nextSession: (state.sessions || []).filter((x) => x.client_id === c.id && x.status === 'booked' && new Date(x.starts_at) > new Date())
+      .sort((a, b) => a.starts_at.localeCompare(b.starts_at))[0] || null,
+    missed: ws.filter((w) => !w.completed_at && w.workout_date && w.workout_date < todayK && w.workout_date >= weekStart),
+    // Clients with an account but nothing planned for the coming week.
+    needsProgram: !!c.email && (!lastPlanned || lastPlanned < addDays(todayK, 6)),
+    lastPlanned,
+    drafts: all.length - ws.length,
+    awaitingReply: state.unread.has(c.id) || o.lastMsg.get(c.id)?.sender === 'client',
+    health: !!(hr?.completed_at && healthFlag(hr)),
+    birthday: hr?.birthday || null,
+    nextBirthday,
+  };
+}
+
+// Things that need the trainer, most urgent first: [label, tab to open].
+function clientAttention(c, s) {
+  if (!s) return [];
+  return [
+    s.awaitingReply ? ['Awaiting your reply', 'chat'] : null,
+    s.health ? ['Health check: needs GP clearance', 'notes'] : null,
+    s.missed.length ? [`Missed ${plural(s.missed.length, 'workout')} this week`, 'workouts'] : null,
+    s.needsProgram ? [s.lastPlanned ? `Plan ends ${dayShort(s.lastPlanned)}` : 'Needs a program', 'workouts'] : null,
+    s.drafts ? [`${plural(s.drafts, 'draft')} to publish`, 'workouts'] : null,
+  ].filter(Boolean);
+}
+
+// One short line under a client's name in the list.
+function clientStatus(c, s) {
+  if (!c.email) return ['No account yet', payLabel(c.id)].filter(Boolean).join(' · ');
+  if (!s) return [c.email, payLabel(c.id)].filter(Boolean).join(' · ');
+  // "today"/"tomorrow" read better in lower case mid-sentence.
+  const rel = (k) => { const t = dayShort(k); return t === 'Today' || t === 'Tomorrow' ? t.toLowerCase() : t; };
+  const parts = [];
+  if (s.stats?.streak) parts.push(`${s.stats.streak}-wk streak`);
+  if (s.nextSession) parts.push(`session ${rel(dayKey(new Date(s.nextSession.starts_at)))}`);
+  else if (s.next) parts.push(`next workout ${rel(s.next.workout_date)}`);
+  else if (s.last) parts.push(`last workout ${rel(dayKey(new Date(s.last.completed_at)))}`);
+  if (payLabel(c.id)) parts.push(payLabel(c.id));
+  const line = parts.join(' · ') || 'Nothing logged yet';
+  return line.charAt(0).toUpperCase() + line.slice(1);
+}
+
+// The line under a client's name at the top of their page.
+function clientSummaryLine(c) {
+  const s = clientSummary(c);
+  if (!s) return null;
+  const parts = [
+    s.stats?.streak ? `Streak ${plural(s.stats.streak, 'week')}` : null,
+    s.last ? `Last workout ${dayShort(dayKey(new Date(s.last.completed_at)))}${s.lastFb?.effort ? ` (effort ${s.lastFb.effort})` : ''}` : null,
+    s.nextSession ? `Next session ${dayShort(dayKey(new Date(s.nextSession.starts_at)))} ${timeText(new Date(s.nextSession.starts_at))}` : null,
+    s.nextBirthday ? (s.nextBirthday === today() ? `Birthday today (${turnsOn(s.birthday, s.nextBirthday)})` : `Turns ${turnsOn(s.birthday, s.nextBirthday)} on ${dayShort(s.nextBirthday)}`) : null,
+  ].filter(Boolean);
+  return parts.length ? h('p', { class: 'client-summary' }, parts.join(' · ')) : null;
+}
+
+// ---------------------------------------------------------------------------
+// Trainer: Today (the page you land on)
+// ---------------------------------------------------------------------------
+
+async function renderTodayPanel() {
+  ui.panel.replaceChildren(h('p', { class: 'muted pad' }, 'Loading…'));
+  await Promise.all([loadOverview(), state.sessions ? loadSessions() : null]);
+  if (state.view !== 'today') return;
+  renderClientList();
+  const todayK = today();
+  const hour = new Date().getHours();
+  const open = (c, tab) => { flushPendingSaves(); state.view = 'client'; state.selectedId = c.id; state.tab = tab; renderClientList(); renderPanel(); };
+  const clients = state.clients;
+  const summaries = new Map(clients.map((c) => [c.id, clientSummary(c)]));
+
+  // Today: sessions and birthdays.
+  const sessionsToday = (state.sessions || []).filter((x) => x.status === 'booked' && dayKey(new Date(x.starts_at)) === todayK)
+    .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+  const bdays = birthdaysOn(todayK);
+  const todayRows = [
+    ...sessionsToday.map((x) => {
+      const c = clients.find((k) => k.id === x.client_id);
+      return homeRow({
+        kind: 'person', when: timeText(new Date(x.starts_at)),
+        title: c?.full_name || 'Client', meta: [`${x.duration_min} min`, x.location].filter(Boolean).join(' · '),
+        onclick: () => (c ? open(c, 'sessions') : null),
+      });
+    }),
+    ...bdays.map((c) => homeRow({
+      kind: 'cake', title: `${firstName(c.full_name)}’s birthday`, meta: `Turns ${turnsOn(state.healthByClient.get(c.id).birthday, todayK)} today`,
+      onclick: () => open(c, c.email ? 'chat' : 'notes'),
+    })),
+  ];
+
+  // Needs attention: one row per client, with every reason.
+  const attention = clients
+    .map((c) => ({ c, items: clientAttention(c, summaries.get(c.id)) }))
+    .filter((x) => x.items.length)
+    .sort((a, b) => b.items.length - a.items.length || a.c.full_name.localeCompare(b.c.full_name));
+
+  // Recent activity: workouts finished and new bests in the last 7 days.
+  const since = addDays(todayK, -7);
+  const o = state.overview || { workouts: [], feedback: new Map(), pbs: [] };
+  const nameOf = (id) => clients.find((c) => c.id === id);
+  const exName = (id) => state.library.find((x) => x.id === id)?.name || 'a lift';
+  const activity = [
+    ...o.workouts.filter((w) => w.completed_at && dayKey(new Date(w.completed_at)) >= since && nameOf(w.client_id)).map((w) => {
+      const fb = o.feedback.get(w.id);
+      const notes = [
+        fb?.effort ? `Effort ${fb.effort}/10` : null,
+        fb?.factors?.length ? fb.factors.map(factorLabel).join(', ') : null,
+        fb?.comment ? `“${fb.comment.length > 70 ? `${fb.comment.slice(0, 70)}…` : fb.comment}”` : null,
+      ].filter(Boolean).join(' · ');
+      return { at: w.completed_at, kind: 'dumbbell', c: nameOf(w.client_id), title: `${firstName(nameOf(w.client_id).full_name)} finished ${w.title}`, meta: notes || null, tab: 'workouts' };
+    }),
+    ...o.pbs.filter((m) => m.tested_on >= since && nameOf(m.client_id)).map((m) => ({
+      at: m.created_at, kind: 'trophy', c: nameOf(m.client_id),
+      title: `${firstName(nameOf(m.client_id).full_name)}: new ${m.reps}RM`, meta: `${exName(m.exercise_id)} ${kg(m.weight_kg)}`, tab: 'lifts',
+    })),
+  ].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 15);
+
+  fill(ui.panel,
+    h('div', { class: 'panel-head' },
+      h('button', { class: 'btn ghost small back', onclick: () => { state.view = 'client'; renderClientList(); renderPanel(); } }, '← Clients'),
+      h('div', { class: 'panel-title' },
+        h('h2', {}, `Good ${hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'}, `, h('em', {}, TRAINER_NAME)),
+        h('p', { class: 'muted small' }, dateOf(todayK).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })))),
+    h('div', { class: 'home today-panel' },
+      homeSection('Today', state.sessions ? h('button', { class: 'btn ghost small', onclick: () => { state.view = 'calendar'; renderClientList(); renderPanel(); } }, 'Calendar') : null, 'sun',
+        todayRows.length ? h('ul', { class: 'home-list' }, todayRows) : h('p', { class: 'muted small' }, 'No sessions or birthdays today.')),
+      homeSection(`Needs attention${attention.length ? ` (${attention.length})` : ''}`, null, 'alert',
+        attention.length
+          ? h('ul', { class: 'home-list' }, attention.map(({ c, items }) => homeRow({
+              title: c.full_name, meta: items.map(([label]) => label).join(' · '), onclick: () => open(c, items[0][1]),
+            })))
+          : h('p', { class: 'muted small' }, 'All caught up. Nobody needs anything from you right now.')),
+      homeSection('Recent activity', null, 'chart',
+        activity.length
+          ? h('ul', { class: 'home-list' }, activity.map((a) => homeRow({
+              kind: a.kind, when: dayShort(dayKey(new Date(a.at))), title: a.title, meta: a.meta, onclick: () => open(a.c, a.tab),
+            })))
+          : h('p', { class: 'muted small' }, 'Nothing in the last 7 days yet.'))));
+}
+
+// ---------------------------------------------------------------------------
+// Trainer: workouts tab (grouped, compact rows that open)
+// ---------------------------------------------------------------------------
+
+function trainerWorkoutRow(w, c, ctx, refresh, open = false) {
+  const todayK = today();
+  const fb = ctx.feedback?.find((f) => f.workout_id === w.id);
+  const missed = !w.is_draft && !w.completed_at && w.workout_date && w.workout_date < todayK;
+  const status = w.is_draft ? 'Draft' : w.completed_at ? `✓ Done${fb?.effort ? ` · effort ${fb.effort}` : ''}` : missed ? 'Missed' : w.workout_date === todayK ? 'Today' : 'Planned';
+  const meta = [plural((Array.isArray(w.exercises) ? w.exercises : []).length, 'exercise'), w.program_week ? `Week ${w.program_week}` : null, fb?.comment || fb?.factors?.length ? 'Has notes' : null].filter(Boolean).join(' · ');
+  const quick = (label, fn, primary = false) => h('button', {
+    class: `btn small${primary ? ' primary' : ''}`,
+    onclick: (e) => { e.preventDefault(); e.stopPropagation(); fn(); },
+  }, label);
+  const quickAction = w.is_draft
+    ? quick('Publish', async () => {
+        const { error } = await sb.from('workouts').update({ is_draft: false }).eq('id', w.id);
+        if (error) return toast(error.message, true);
+        toast(`Published. ${firstName(c.full_name)} can see it now.`);
+        refresh();
+      }, true)
+    : !w.completed_at && state.lifting ? quick('Log', () => openLogDialog(w, { clientId: c.id, ...ctx, asTrainer: true, onSaved: refresh })) : null;
+  const card = workoutCard(w, {
+    onChange: refresh,
+    trainerFor: c,
+    inRow: true,
+    ...ctx,
+    actions: [
+      ...(w.is_draft || !state.lifting ? [] : [['Log', () => openLogDialog(w, { clientId: c.id, ...ctx, asTrainer: true, onSaved: refresh })]]),
+      ['Edit', () => openWorkoutEditor(c, w, refresh)],
+      ['Duplicate', () => openWorkoutEditor(c, { ...w, id: undefined, title: `${w.title} (copy)`, workout_date: today(), completed_at: null, is_draft: true }, refresh)],
+      ...(w.is_draft ? [] : [['Unpublish', async () => {
+        const { error } = await sb.from('workouts').update({ is_draft: true }).eq('id', w.id);
+        if (error) return toast(error.message, true);
+        toast(`Moved back to drafts. ${firstName(c.full_name)} can't see it now.`);
+        refresh();
+      }]]),
+      ['Delete', async () => {
+        if (!confirm(`Delete "${w.title}"?`)) return;
+        const { error } = await sb.from('workouts').delete().eq('id', w.id);
+        if (error) return toast(error.message, true);
+        toast('Workout deleted');
+        refresh();
+      }],
+    ],
+  });
+  return h('details', { class: 'tw' + (w.is_draft ? ' is-draft' : w.completed_at ? ' is-done' : missed ? ' is-missed' : ''), open: open || null },
+    h('summary', {},
+      h('span', { class: 'tw-when' }, w.workout_date ? dayShort(w.workout_date) : 'Any day'),
+      h('span', { class: 'tw-what' }, h('b', {}, w.title), h('span', { class: 'muted small' }, meta)),
+      h('span', { class: 'tw-status' }, status),
+      quickAction),
+    h('div', { class: 'tw-body' }, card));
+}
+
+// The "+ New" button: a small menu of what to create.
+function newMenu(items) {
+  const menu = h('details', { class: 'new-menu' },
+    h('summary', { class: 'btn primary' }, '+ New'),
+    h('div', { class: 'menu', role: 'menu' }, items.filter(Boolean).map(([label, fn]) => h('button', {
+      type: 'button', role: 'menuitem',
+      onclick: () => { menu.open = false; fn(); },
+    }, label))));
+  return menu;
+}
+// One listener closes any open "+ New" menu when you click elsewhere.
+document.addEventListener('click', (e) => {
+  for (const m of document.querySelectorAll('.new-menu[open]')) if (!m.contains(e.target)) m.open = false;
+});
+
 async function renderTrainerWorkouts(body, c) {
   const list = h('div', { class: 'stack' }, h('p', { class: 'muted' }, 'Loading…'));
-  const refresh = () => renderTrainerWorkouts(body, c);
+  const refresh = () => { renderTrainerWorkouts(body, c); loadOverview().then(() => { renderClientList(); refreshPanelSummary(c); }); };
   const reminder = h('div');
-  const publishAll = h('span');
   const programsEl = h('div');
   const streakEl = h('div');
-  const newProgram = h('button', { class: 'btn', hidden: true, onclick: () => openProgramDialog(c, null, refresh) }, '+ New program');
-  body.replaceChildren(
-    reminder,
-    streakEl,
-    programsEl,
-    h('div', { class: 'row-between' },
-      h('h3', {}, 'Workouts'),
-      h('div', { class: 'actions' },
-        publishAll,
-        newProgram,
-        h('button', { class: 'btn primary', onclick: () => openWorkoutEditor(c, null, refresh) }, '+ New workout'))),
-    list);
+  let programsReady = false;
+  const toolbar = h('div', { class: 'row-between' }, h('h3', {}, 'Workouts'), h('span'));
+  const drawToolbar = () => toolbar.lastChild.replaceWith(newMenu([
+    ['Workout', () => openWorkoutEditor(c, null, refresh)],
+    programsReady ? ['Program (a block of weeks)', () => openProgramDialog(c, null, refresh)] : null,
+  ]));
+  drawToolbar();
+  body.replaceChildren(reminder, streakEl, programsEl, toolbar, list);
   // Programs (hidden until the database has them).
   loadPrograms(c.id).then((programs) => {
     if (!programs || !programsEl.isConnected) return;
-    newProgram.hidden = false;
+    programsReady = true;
+    drawToolbar();
     if (programs.length) {
       fill(programsEl, h('h3', {}, 'Programs'), h('div', { class: 'stack' }, programs.map((pr) => programCard(c, pr, refresh))));
     }
@@ -929,9 +1222,7 @@ async function renderTrainerWorkouts(body, c) {
   });
 
   const [{ data, error }, ctx, excused] = await Promise.all([
-    sb.from('workouts').select('*').eq('client_id', c.id)
-      .order('workout_date', { ascending: false, nullsFirst: true })
-      .order('created_at', { ascending: false }),
+    sb.from('workouts').select('*').eq('client_id', c.id),
     loadTrainingData(c.id),
     loadExcused(c.id),
   ]);
@@ -940,45 +1231,47 @@ async function renderTrainerWorkouts(body, c) {
   const published = data.filter((w) => !w.is_draft);
   if (published.length) streakEl.replaceWith(trainerStreakCard(c, published, excused, refresh));
   if (!data.length) {
-    list.replaceChildren(h('p', { class: 'muted' }, `No workouts yet. Create ${firstName(c.full_name)}'s first one.`));
+    list.replaceChildren(h('p', { class: 'muted' }, `No workouts yet. Tap + New to write ${firstName(c.full_name)}'s first one.`));
     return;
   }
-  const drafts = data.filter((w) => w.is_draft);
-  if (drafts.length) {
-    publishAll.replaceWith(h('button', {
-      class: 'btn',
-      onclick: async () => {
-        if (!confirm(`Publish ${drafts.length} draft${drafts.length === 1 ? '' : 's'}? ${firstName(c.full_name)} will be able to see ${drafts.length === 1 ? 'it' : 'them'} straight away.`)) return;
-        const { error: pubError } = await sb.from('workouts').update({ is_draft: false }).in('id', drafts.map((w) => w.id));
-        if (pubError) return toast(pubError.message, true);
-        toast(`Published. ${firstName(c.full_name)} can see ${drafts.length === 1 ? 'it' : 'them'} now.`);
-        refresh();
-      },
-    }, `Publish all drafts (${drafts.length})`));
-  }
-  list.replaceChildren(...data.map((w) => workoutCard(w, {
-    onChange: refresh,
-    trainerFor: c,
-    ...ctx,
-    actions: [
-      ...(w.is_draft || !state.lifting ? [] : [['Log', () => openLogDialog(w, { clientId: c.id, ...ctx, asTrainer: true, onSaved: refresh })]]),
-      ['Edit', () => openWorkoutEditor(c, w, refresh)],
-      ['Duplicate', () => openWorkoutEditor(c, { ...w, id: undefined, title: `${w.title} (copy)`, workout_date: today(), completed_at: null, is_draft: true }, refresh)],
-      ...(w.is_draft ? [] : [['Unpublish', async () => {
-        const { error: upError } = await sb.from('workouts').update({ is_draft: true }).eq('id', w.id);
-        if (upError) return toast(upError.message, true);
-        toast(`Moved back to drafts. ${firstName(c.full_name)} can't see it now.`);
-        refresh();
-      }]]),
-      ['Delete', async () => {
-        if (!confirm(`Delete "${w.title}"?`)) return;
-        const { error: delError } = await sb.from('workouts').delete().eq('id', w.id);
-        if (delError) return toast(delError.message, true);
-        toast('Workout deleted');
-        refresh();
-      }],
-    ],
-  })));
+
+  // Group: drafts, this week, coming up, then past (folded away).
+  const todayK = today();
+  const weekStart = mondayKey(todayK);
+  const weekEnd = addDays(weekStart, 6);
+  const asc = (a, b) => (a.workout_date || '9999').localeCompare(b.workout_date || '9999') || a.created_at.localeCompare(b.created_at);
+  const drafts = data.filter((w) => w.is_draft).sort(asc);
+  const thisWeek = published.filter((w) => w.workout_date && w.workout_date >= weekStart && w.workout_date <= weekEnd).sort(asc);
+  const coming = published.filter((w) => !w.completed_at && (!w.workout_date || w.workout_date > weekEnd)).sort(asc);
+  const past = published.filter((w) => !thisWeek.includes(w) && !coming.includes(w)).sort((a, b) => -asc(a, b));
+  const row = (w) => trainerWorkoutRow(w, c, ctx, refresh);
+  const publishAll = drafts.length > 1 ? h('button', {
+    class: 'btn small',
+    onclick: async () => {
+      if (!confirm(`Publish ${drafts.length} drafts? ${firstName(c.full_name)} will be able to see them straight away.`)) return;
+      const { error: pubError } = await sb.from('workouts').update({ is_draft: false }).in('id', drafts.map((w) => w.id));
+      if (pubError) return toast(pubError.message, true);
+      toast(`Published. ${firstName(c.full_name)} can see them now.`);
+      refresh();
+    },
+  }, `Publish all (${drafts.length})`) : null;
+  const group = (title, items, action = null) => (items.length ? h('section', { class: 'tw-group' },
+    h('div', { class: 'row-between' }, h('h4', { class: 'eyebrow' }, `${title} (${items.length})`), action),
+    h('div', { class: 'tw-list' }, items.map(row))) : null);
+  fill(list,
+    group('Drafts', drafts, publishAll),
+    group('This week', thisWeek),
+    group('Coming up', coming),
+    past.length ? h('details', { class: 'tw-past' },
+      h('summary', {}, `Past workouts (${past.length})`),
+      h('div', { class: 'tw-list' }, past.map(row))) : null);
+}
+
+// Keeps the summary under the client's name current after changes.
+function refreshPanelSummary(c) {
+  const el = ui.panel?.querySelector('.client-summary');
+  const fresh = clientSummaryLine(c);
+  if (el && fresh) el.replaceWith(fresh);
 }
 
 const blankExercise = () => ({ name: '', exercise_id: '', sets: '', reps: '', pct: '', rm: '1', load: '', rest: '', notes: '' });
@@ -1096,7 +1389,7 @@ function openWorkoutEditor(client, workout, onSaved, opts = {}) {
 // Shared: workout card
 // ---------------------------------------------------------------------------
 
-function workoutCard(w, { actions = [], onChange, trainerFor, maxes = [], logs = [], feedback = null, onLog }) {
+function workoutCard(w, { actions = [], onChange, trainerFor, maxes = [], logs = [], feedback = null, onLog, inRow = false }) {
   const exercises = Array.isArray(w.exercises) ? w.exercises : [];
   const done = !!w.completed_at;
   const draft = !!w.is_draft;
@@ -1137,8 +1430,9 @@ function workoutCard(w, { actions = [], onChange, trainerFor, maxes = [], logs =
   return h('article', { class: 'card workout' + (draft ? ' draft' : done ? ' done' : '') },
     h('div', { class: 'row-between top' },
       h('div', {},
-        h('p', { class: 'eyebrow' }, [w.workout_date ? formatDate(w.workout_date) : 'Any day', w.program_week ? `Week ${w.program_week}` : null].filter(Boolean).join(' · ')),
-        h('h4', {}, w.title),
+        // Inside a trainer's workout row, the row already shows the date and title.
+        inRow ? null : h('p', { class: 'eyebrow' }, [w.workout_date ? formatDate(w.workout_date) : 'Any day', w.program_week ? `Week ${w.program_week}` : null].filter(Boolean).join(' · ')),
+        inRow ? null : h('h4', {}, w.title),
         draft ? h('span', { class: 'badge' }, `Draft · not visible to ${firstName(trainerFor?.full_name)}`) : null,
         !draft && done ? h('span', { class: 'badge' }, `✓ Done · ${formatDateTime(w.completed_at)}`) : null),
       actions.length ? h('div', { class: 'actions' },
@@ -1476,10 +1770,13 @@ function showNotice(n) {
   dlg.querySelector('h2').focus();
 }
 
-// "Wed 11" (this month and next) or "11 Dec"-style when further away.
+// "Today", "Tomorrow", "Wed 11" within a week either side, else "3 Dec".
 function dayShort(key) {
   const d = dateOf(key);
-  if (Math.abs(d - dateOf(today())) >= 25 * 86400e3) return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  const days = Math.round((d - dateOf(today())) / 86400e3);
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Tomorrow';
+  if (Math.abs(days) > 6) return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
   return `${d.toLocaleDateString(undefined, { weekday: 'short' })} ${d.getDate()}`;
 }
 
@@ -1493,6 +1790,9 @@ const ICONS = {
   chart: ['M4 20h16', 'M6 20v-6', 'M11 20V9', 'M16 20v-9', 'M5 10l5-4l4 3l5-5'],
   dumbbell: ['M5 7h3v10H5z', 'M16 7h3v10h-3z', 'M2.5 10v4', 'M21.5 10v4', 'M8 12h8'],
   person: ['M12 4a4 4 0 1 1 0 8a4 4 0 1 1 0-8', 'M4 21a8 8 0 0 1 16 0'],
+  sun: ['M12 8a4 4 0 1 1 0 8a4 4 0 1 1 0-8', 'M12 2v2', 'M12 20v2', 'M2 12h2', 'M20 12h2', 'M4.9 4.9l1.4 1.4', 'M17.7 17.7l1.4 1.4', 'M4.9 19.1l1.4-1.4', 'M17.7 6.3l1.4-1.4'],
+  alert: ['M12 3.5l9.5 17h-19z', 'M12 10v5', 'M12 18v.01'],
+  cake: ['M4 21h16', 'M5 21v-7h14v7', 'M5 16.5c2.3 1.4 4.7 1.4 7 0s4.7-1.4 7 0', 'M12 14v-4', 'M12 6.5v.01', 'M8 14v-3', 'M16 14v-3'],
 };
 const icon = (name) => svgEl('svg', { viewBox: '0 0 24 24', class: 'icon', 'aria-hidden': 'true' },
   ICONS[name].map((d) => svgEl('path', { d })));
@@ -3938,6 +4238,8 @@ async function renderChat(body, clientId, me) {
       if (error) return toast(error.message, true);
       input.value = '';
       add(data);
+      // Replying clears "Awaiting your reply" for this client.
+      if (me === 'trainer' && state.overview) { state.overview.lastMsg.set(clientId, data); renderClientList(); }
       input.focus();
     },
   }, input, send);
