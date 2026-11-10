@@ -1017,22 +1017,6 @@ body.is-dragging { cursor: grabbing; -webkit-user-select: none; user-select: non
 .rest-bar.finished { border-color: var(--color-accent); background: var(--color-accent); }
 .rest-bar.finished .eyebrow, .rest-bar.finished .timer-time { color: var(--color-on-accent); }
 
-/* Tick a set off: starts the rest timer. */
-.set-check {
-  appearance: none;
-  width: var(--control-height-sm);
-  height: var(--control-height-sm);
-  border: var(--border-width) solid var(--color-input-border);
-  border-radius: var(--radius-pills);
-  background: var(--color-surface);
-  color: var(--color-text-muted);
-  font: inherit;
-  font-weight: var(--weight-bold);
-  cursor: pointer;
-  transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
-}
-.set-check[aria-pressed="true"] { border-color: var(--color-accent); background: var(--color-accent); color: var(--color-on-accent); }
-.set-check:focus-visible { outline: var(--border-width-strong) solid var(--color-focus); outline-offset: var(--border-width-strong); }
 .set-row.done .set-num { color: var(--color-text); }
 
 /* Plate calculator. */
@@ -1248,9 +1232,11 @@ button.link {
 }
 button.link:focus-visible { outline: var(--border-width-strong) solid var(--color-focus); outline-offset: var(--border-width-strong); }
 
-/* Workout page sets: Set · kg · (bar) · Reps · Done. No per-set effort. */
-.workout-page .set-row { grid-template-columns: var(--space-8) 1fr 1fr var(--control-height-sm); }
-.workout-page .set-rows.with-bar .set-row { grid-template-columns: var(--space-8) 1fr var(--control-height-sm) 1fr var(--control-height-sm); }
+/* Workout page sets: Set · kg · Reps (· plates button on barbell lifts). A set
+   with reps counts as done: its boxes take a terracotta outline. */
+.workout-page .set-row { grid-template-columns: var(--space-8) 1fr 1fr; }
+.workout-page .set-rows.with-bar .set-row { grid-template-columns: var(--space-8) 1fr 1fr var(--control-height-sm); }
+.workout-page .set-row.done input { border-color: var(--color-accent); }
 .workout-page .log-ex .ex-meta { margin: 0 0 var(--space-1); }
 .ex-actions { margin-top: var(--space-1); }
 .workout-page .log-ex .howto { margin-top: var(--space-4); }
@@ -1297,3 +1283,32 @@ button.link:focus-visible { outline: var(--border-width-strong) solid var(--colo
 .effort-btn:focus-visible { outline: var(--border-width-strong) solid var(--color-focus); outline-offset: var(--border-width-strong); }
 .effort-hint { margin: var(--space-3) 0 0; }
 .feedback-effort { margin: 0 0 var(--space-2); }
+
+/* Plate helper: 25 kg plates are off unless the client's gym has them. */
+.plates > .chips { margin: var(--space-3) 0 0; }
+.plate25-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-height-sm);
+  padding: 0 var(--space-3);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-pills);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--text-body-sm);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+/* A small switch dot: hollow when off, filled terracotta when on. */
+.plate25-toggle::before {
+  content: "";
+  width: var(--space-3);
+  height: var(--space-3);
+  border: var(--border-width-strong) solid var(--color-input-border);
+  border-radius: var(--radius-pills);
+}
+.plate25-toggle[aria-pressed="true"] { border-color: var(--color-accent); color: var(--color-accent-text); }
+.plate25-toggle[aria-pressed="true"]::before { border-color: var(--color-accent); background: var(--color-accent); }
+.plate25-toggle:focus-visible { outline: var(--border-width-strong) solid var(--color-focus); outline-offset: var(--border-width-strong); }

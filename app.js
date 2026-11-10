@@ -1799,12 +1799,17 @@ function restTimer() {
 }
 
 // Which plates go on each side of the bar.
-function platesFor(total, bar) {
+// Many gyms (Revo included) have no 25 kg plates, so they're off unless the
+// client turns them on in the plate helper. The choice is kept on the phone.
+const uses25 = () => remember('plates-25') === true;
+const availablePlates = () => PLATES_KG.filter((p) => p !== 25 || uses25());
+
+function platesFor(total, bar, available = availablePlates()) {
   if (!(total > 0)) return null;
   if (total < bar) return { tooLight: true };
   let side = (total - bar) / 2;
   const plates = [];
-  for (const p of PLATES_KG) {
+  for (const p of available) {
     while (side >= p - 1e-9) { plates.push(p); side -= p; }
   }
   const loaded = bar + 2 * plates.reduce((a, b) => a + b, 0);
@@ -1895,14 +1900,23 @@ function plateCalculator(signal) {
     'aria-pressed': String(barChoice() === b),
     onclick: () => { remember('bar-kg', b); document.dispatchEvent(new Event('empt-bar-change')); },
   }, `${b} kg bar`));
+  const has25 = PLATES_KG.includes(25);
+  const toggle25 = has25 ? h('button', {
+    type: 'button',
+    class: 'plate25-toggle',
+    title: 'Turn on if your gym has 25 kg plates',
+    onclick: () => { remember('plates-25', !uses25()); document.dispatchEvent(new Event('empt-bar-change')); },
+  }, '25 kg plates') : null;
   let current = null;
   const el = h('div', { class: 'plates' },
-    h('div', { class: 'row-between' }, h('p', { class: 'eyebrow' }, 'Plates'), h('div', { class: 'chips', role: 'group', 'aria-label': 'Bar weight' }, toggles)),
+    h('div', { class: 'row-between' }, h('p', { class: 'eyebrow' }, 'Plates'), toggle25),
+    h('div', { class: 'chips', role: 'group', 'aria-label': 'Bar weight' }, toggles),
     body);
   function update(kgValue) {
     current = Number(kgValue) > 0 ? Number(kgValue) : null;
     const bar = barChoice();
     toggles.forEach((t, i) => t.setAttribute('aria-pressed', String(BARS_KG[i] === bar)));
+    toggle25?.setAttribute('aria-pressed', String(uses25()));
     if (current == null) {
       fill(body, h('p', { class: 'muted small' }, 'Enter a weight to see which plates to load.'));
       return;
@@ -2011,16 +2025,30 @@ async function renderWorkoutPage() {
     const barbell = isBarbell(e);
 
     const setsEl = h('div', { class: 'set-rows' + (barbell ? ' with-bar' : '') });
+    // A set counts as done once it has reps: no tick needed. Entering the
+    // reps for a set the first time also starts the rest timer.
+    const hasReps = (r) => r.reps !== '' && r.reps != null;
     const num = (r, key, placeholder, stepSize, label) => h('input', {
       type: 'number', inputmode: 'decimal', min: '0', step: stepSize, value: r[key] ?? '', placeholder: String(placeholder), 'aria-label': label,
-      oninput: (ev) => { r[key] = ev.target.value; persist(); },
+      oninput: (ev) => {
+        r[key] = ev.target.value;
+        ev.target.closest('.set-row')?.classList.toggle('done', hasReps(r));
+        persist();
+      },
+      onchange: () => {
+        if (key !== 'reps' || !hasReps(r) || r.done) return;
+        r.done = true;
+        persist();
+        timer.start(rest || undefined);
+      },
     });
     const draw = () => fill(setsEl,
       h('div', { class: 'set-row set-head', 'aria-hidden': 'true' },
-        h('span', {}, 'Set'), h('span', {}, 'kg'), barbell ? h('span') : null, h('span', {}, 'Reps'), h('span', {}, 'Done')),
-      ...rows.map((r, j) => h('div', { class: 'set-row' + (r.done ? ' done' : '') },
+        h('span', {}, 'Set'), h('span', {}, 'kg'), h('span', {}, 'Reps'), barbell ? h('span', {}, 'Plates') : null),
+      ...rows.map((r, j) => h('div', { class: 'set-row' + (hasReps(r) ? ' done' : '') },
         h('span', { class: 'set-num' }, String(j + 1)),
         num(r, 'weight', planKg, '0.5', `${e.name} set ${j + 1} weight in kg`),
+        num(r, 'reps', planReps, '1', `${e.name} set ${j + 1} reps`),
         // Barbell lifts: tap the bar to see how to load this set's weight.
         barbell ? h('button', {
           type: 'button',
@@ -2029,24 +2057,6 @@ async function renderWorkoutPage() {
           title: 'How to load the bar',
           onclick: () => openBarSetup(e, r.weight !== '' && r.weight != null ? r.weight : planKg),
         }, barbellIcon()) : null,
-        num(r, 'reps', planReps, '1', `${e.name} set ${j + 1} reps`),
-        h('button', {
-          type: 'button',
-          class: 'set-check',
-          'aria-pressed': String(!!r.done),
-          'aria-label': `Set ${j + 1} of ${e.name} done${rest ? `, then rest ${clockText(rest)}` : ''}`,
-          title: r.done ? 'Done' : 'Mark as done and start rest',
-          onclick: () => {
-            r.done = !r.done;
-            if (r.done) {
-              if (r.weight === '' || r.weight == null) r.weight = planKg;
-              if (r.reps === '' || r.reps == null) r.reps = planReps;
-              timer.start(rest || undefined);
-            }
-            persist();
-            draw();
-          },
-        }, '✓'),
         // What they did on this set last time, right under where they fill it in.
         previous?.[j] ? h('p', { class: 'set-prev' }, `Last time: ${prevSetText(previous[j], false)}`) : null)),
       previous && previous.length > rows.length
@@ -2135,7 +2145,7 @@ async function renderWorkoutPage() {
     h('p', { class: 'eyebrow' }, [w.workout_date ? formatDate(w.workout_date) : 'Any day', w.program_week ? `Week ${w.program_week}` : null].filter(Boolean).join(' · ')),
     h('h1', {}, w.title),
     w.notes ? h('p', { class: 'lead' }, w.notes) : null,
-    h('p', { class: 'muted small' }, 'Enter what you lift as you go and tap ✓ when a set is done: it starts your rest timer. Grey numbers are the plan.'),
+    h('p', { class: 'muted small' }, 'Enter the weight and reps for each set as you go. Entering the reps starts your rest timer. Grey numbers are the plan.'),
     exercises.length ? h('div', { class: 'stack' }, blocks.map((b) => b.el)) : h('p', { class: 'muted' }, 'This workout has no exercises listed.'),
     effortCard,
     comment ? h('section', { class: 'card' }, field(`Comments for ${TRAINER_NAME} (optional)`, comment)) : null,
