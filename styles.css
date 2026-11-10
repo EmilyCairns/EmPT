@@ -530,16 +530,88 @@ input[type="checkbox"], input[type="radio"] {
 
 /* ---- Client Home ------------------------------------------------------ */
 
-.home > .goals { margin-top: 0; }
-.home h3 { margin-top: var(--space-4); }
-.home .row-between h3 { margin: 0; }
-.home > section > .row-between { margin-bottom: var(--space-3); }
+/* Client Home: one standout Today card; everything else sits flat on the
+   page in short sections with hairline rows. */
+.home { display: flex; flex-direction: column; gap: var(--space-8); }
+.home-status { margin: calc(-1 * var(--space-2)) 0 calc(-1 * var(--space-4)); color: var(--color-text-muted); font-size: var(--text-body-sm); }
+.home h3 { margin: 0; }
+.home-section > .row-between { min-height: var(--control-height-sm); margin-bottom: var(--space-1); }
+.home-list { margin: 0; padding: 0; list-style: none; border-top: var(--border-width) solid var(--color-border); }
+.home-list li { border-bottom: var(--border-width) solid var(--color-border); }
+.home-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+  min-height: var(--control-height);
+  padding: var(--space-3) 0;
+  border: 0;
+  background: none;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.home-row:hover .home-chev { color: var(--color-accent-text); }
+.home-row:focus-visible { outline: var(--border-width-strong) solid var(--color-focus); outline-offset: var(--border-width-strong); border-radius: var(--radius-nav); }
+.home-when { flex: none; width: var(--space-16); color: var(--color-accent-text); font-size: var(--text-body-sm); font-weight: var(--weight-semibold); }
+.home-row.is-session .home-when { color: var(--color-text); }
+.home-row.is-session .home-what b { align-self: flex-start; padding: 0 var(--space-2); border-radius: var(--radius-nav); background: var(--color-session-bg); color: var(--color-session-text); }
+.home-what { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: var(--space-1); }
+.home-what b { overflow-wrap: anywhere; }
+.home-what .dot { margin-left: var(--space-2); vertical-align: middle; }
+.home-chev { flex: none; color: var(--color-text-muted); font-size: var(--text-subheading); }
+/* This week: day dots with the streak at the end. */
+.week-strip { display: flex; align-items: center; gap: var(--space-4); padding-top: var(--space-2); }
+.week-strip .week-dots { flex: 1; }
+.week-msg { margin: var(--space-3) 0 0; }
+.streak-mini {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-16);
+  aspect-ratio: 1;
+  padding: 0;
+  border: var(--border-width-strong) solid var(--color-accent);
+  border-radius: var(--radius-pills);
+  background: var(--color-surface);
+  color: var(--color-accent-text);
+  font: inherit;
+  line-height: var(--leading-tight);
+  cursor: pointer;
+}
+.streak-mini b { font-family: var(--font-display); font-size: var(--text-title); font-weight: var(--weight-regular); }
+.streak-mini span { font-size: var(--text-mono); font-weight: var(--weight-semibold); }
+/* A sealed week: the terracotta wax seal. */
+.streak-mini.sealed {
+  border: 0;
+  outline: var(--border-width) dashed var(--color-on-accent);
+  outline-offset: calc(-1 * var(--space-1));
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  transform: rotate(var(--seal-tilt));
+}
+.streak-mini:focus-visible { outline: var(--border-width-strong) solid var(--color-focus); outline-offset: var(--border-width-strong); }
+/* Today: a little more room than other cards; exercises fold away. */
+.today-card { padding: var(--space-6); }
+.today-meta { margin: 0; color: var(--color-text-muted); }
+.today-ex { margin-top: var(--space-4); }
+.today-ex summary { cursor: pointer; width: fit-content; font-size: var(--text-body-sm); font-weight: var(--weight-semibold); text-decoration: underline; text-underline-offset: var(--space-1); }
+.today-ex .ex-lines { margin-top: var(--space-2); }
+.notice-dialog .eyebrow { margin: 0 0 var(--space-1); }
+.notice-dialog h2 { margin-bottom: var(--space-3); }
+.notice-dialog h2:focus { outline: none; }
+.progress-lifts { margin-top: var(--space-4); }
 
 /* Today: the one thing to do now. */
 .today-card h2 { margin: 0 0 var(--space-3); font-size: var(--text-heading); line-height: var(--leading-heading); }
 .today-card .eyebrow { margin-bottom: var(--space-1); }
 .today-card .btn.block { margin-top: var(--space-5); }
 .today-card .badge { margin: 0 0 var(--space-3); }
+.today-card h2 .badge { margin: 0; vertical-align: middle; }
+.today-card:not(.done):not(.rest) h2 { margin-bottom: var(--space-1); }
 .today-card.done, .today-card.rest { background: var(--color-surface); border: var(--border-width) solid var(--color-border); }
 .today-msg { margin: 0 0 var(--space-2); font-size: var(--text-body-lg); font-weight: var(--weight-light); color: var(--color-text-body); }
 .today-session {
@@ -569,14 +641,6 @@ input[type="checkbox"], input[type="radio"] {
 .ex-lines b { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* This week: progress ring and a dot per day. */
-.week-top { display: flex; align-items: center; gap: var(--space-5); margin-top: var(--space-2); }
-.week-side { flex: 1; min-width: 0; }
-.week-msg { margin: 0 0 var(--space-3); font-weight: var(--weight-semibold); }
-.ring { width: calc(var(--space-20) + var(--space-4)); height: calc(var(--space-20) + var(--space-4)); flex: none; }
-.ring-bg { fill: none; stroke: var(--color-border); stroke-width: var(--space-2); }
-.ring-fg { fill: none; stroke: var(--color-accent); stroke-width: var(--space-2); stroke-linecap: round; transition: stroke-dashoffset var(--motion-fast); }
-.ring-n { font-family: var(--font-display); font-size: var(--text-subheading); fill: var(--color-text); }
-.ring-l { font-family: var(--font-body); font-size: var(--text-mono); fill: var(--color-text-muted); }
 .week-dots { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
 .wd { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); color: var(--color-text-muted); font-size: var(--text-eyebrow); font-weight: var(--weight-semibold); }
 .wd i {
@@ -620,7 +684,7 @@ input[type="checkbox"], input[type="radio"] {
    seals are kept for good; the next ones wait as dashed outlines. */
 .seals { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--space-2); margin: var(--space-5) 0 var(--space-2); padding: 0; list-style: none; }
 .seal { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); color: var(--color-text-muted); font-size: var(--text-mono); }
-.seal i, .week-seal, .big-seal {
+.seal i, .big-seal {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -634,7 +698,7 @@ input[type="checkbox"], input[type="radio"] {
 .seal i { width: 100%; max-width: var(--space-12); border: var(--border-width-strong) dashed var(--color-input-border); }
 .seal b { font-family: var(--font-display); font-size: var(--text-subheading); font-weight: var(--weight-regular); }
 .seal.earned { color: var(--color-accent-text); font-weight: var(--weight-semibold); }
-.seal.earned i, .week-seal, .big-seal {
+.seal.earned i, .big-seal {
   border: 0;
   outline: var(--border-width) dashed var(--color-on-accent);
   outline-offset: calc(-1 * var(--space-1));
@@ -643,11 +707,6 @@ input[type="checkbox"], input[type="radio"] {
   transform: rotate(var(--seal-tilt));
 }
 .seal.earned b { font-weight: var(--weight-regular); }
-/* This week, once every workout is done: a seal pressed onto the card's corner. */
-.week-card { position: relative; }
-.week-seal { position: absolute; top: calc(-1 * var(--space-3)); right: var(--space-4); width: var(--space-16); }
-.week-seal b { font-family: var(--font-display); font-size: var(--text-title); font-weight: var(--weight-regular); }
-.week-seal span { font-size: var(--text-mono); }
 
 /* "Week sealed!" moment: the seal stamps down onto the page. */
 .dialog.celebrate { text-align: center; }
@@ -1215,8 +1274,6 @@ body.is-dragging { cursor: grabbing; -webkit-user-select: none; user-select: non
 .join-card .eyebrow { margin-bottom: var(--space-2); }
 .share-line { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-4); }
 .share-line p { margin: 0; }
-.wins-preview .row-between h3 { margin: 0; }
-.wins-preview .stack { margin-top: var(--space-3); }
 .share-nudge { margin: var(--space-3) 0 0; }
 button.link {
   padding: 0;
