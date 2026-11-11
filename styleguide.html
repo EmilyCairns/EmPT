@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EmPT Style Guide</title>
+  <meta name="color-scheme" content="light">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;1,6..72,300;1,6..72,400&display=swap">
+  <link rel="stylesheet" href="design-tokens.css">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    /* Layout for this page only. Still uses tokens. */
+    .sg { width: 100%; max-width: var(--content-max-width); margin: 0 auto; padding: var(--space-10) var(--gutter) var(--space-20); }
+    .sg > section { margin-top: var(--space-16); }
+    .sg > section > h3 { margin: 0 0 var(--space-6); padding-bottom: var(--space-2); border-bottom: var(--border-width) solid var(--color-border); }
+    .sg-label { display: block; margin: var(--space-6) 0 var(--space-3); color: var(--color-text-muted); font-size: var(--text-body-sm); }
+    .sg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--space-4); }
+    .sg-swatch { overflow: hidden; border-radius: var(--radius-cards); background: var(--color-surface-raised); }
+    .sg-swatch-color { height: var(--space-16); border-bottom: var(--border-width) solid var(--color-border); }
+    .sg-swatch-label { padding: var(--space-3) var(--space-4); font-size: var(--text-body-sm); font-weight: var(--weight-semibold); }
+    .sg-swatch-label code { display: block; margin-top: var(--space-1); color: var(--color-text-muted); font-family: var(--font-mono); font-size: var(--text-mono); font-weight: var(--weight-regular); letter-spacing: normal; overflow-wrap: anywhere; }
+    .sg-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-bottom: var(--space-4); }
+    .sg-type > * { margin: 0 0 var(--space-4); }
+    .sg-type code, .sg-space code { margin-left: var(--space-2); color: var(--color-text-muted); font-family: var(--font-mono); font-size: var(--text-mono); font-style: normal; font-weight: var(--weight-regular); letter-spacing: normal; }
+    .sg-space { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-2); }
+    .sg-space-bar { height: var(--space-4); border-radius: var(--radius-chart); background: var(--color-accent); }
+    .sg-radius { display: grid; place-items: center; width: var(--space-20); height: var(--space-16); border: var(--border-width-strong) solid var(--color-accent); background: var(--color-surface-raised); font-size: var(--text-eyebrow); }
+    .sg-shadow { display: grid; place-items: center; width: 200px; height: 120px; border-radius: var(--radius-cards); background: var(--color-surface); font-size: var(--text-body-sm); }
+    .sg-static-toast { position: static; display: inline-block; transform: none; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand"><img src="icon.svg" alt="" width="32" height="32">EmPT</div>
+      <div class="topbar-right"><a class="btn ghost small" href="./">Open the app</a></div>
+    </header>
+
+    <main class="sg">
+      <p class="eyebrow">Design system</p>
+      <h1 class="display">A warm journal <em>on parchment</em></h1>
+      <p class="lead">A live preview of design-tokens.css. Change a value there, save, and reload this page. The rules are in DESIGN.md.</p>
+
+      <section>
+        <h3>Colours</h3>
+        <div class="sg-grid" id="swatches"></div>
+      </section>
+
+      <section class="sg-type">
+        <h3>Type</h3>
+        <h1 class="display">Your training, <em>personalised</em>. <code>.display · --text-heading-lg · serif</code></h1>
+        <h1>Hi <em>Amy</em> <code>h1 · --text-heading · serif, italic accent</code></h1>
+        <h4>Lower body strength <code>h2/h4 · --text-title · serif roman</code></h4>
+        <p class="eyebrow">Up next <code>h3 / .eyebrow · --text-eyebrow</code></p>
+        <p class="lead">Intro text, light and calm. <code>.lead · --text-body-lg</code></p>
+        <p>Body text. Warm up for ten minutes, then work through each exercise in order. <code>--text-body</code></p>
+        <p class="small muted">Helper text, dates and emails. <code>--text-body-sm</code></p>
+        <p><span class="badge">✓ Done · 30 Nov</span> <code>.badge · --text-mono</code></p>
+      </section>
+
+      <section>
+        <h3>Spacing</h3>
+        <div id="spacing"></div>
+      </section>
+
+      <section>
+        <h3>Shape and elevation</h3>
+        <div class="sg-row">
+          <div class="sg-radius" style="border-radius:var(--radius-nav)">nav 12</div>
+          <div class="sg-radius" style="border-radius:var(--radius-cards)">cards 24</div>
+          <div class="sg-radius" style="border-radius:var(--radius-buttons)">buttons 40</div>
+          <div class="sg-radius" style="border-radius:var(--radius-pills)">pills</div>
+        </div>
+        <div class="sg-row">
+          <div class="sg-shadow" style="box-shadow:var(--shadow-lg)">--shadow-lg</div>
+          <div class="sg-shadow" style="box-shadow:var(--shadow-xl)">--shadow-xl</div>
+        </div>
+      </section>
+
+      <section>
+        <h3>Buttons</h3>
+        <div class="sg-row">
+          <button class="btn primary">Mark as done</button>
+          <button class="btn">+ Add exercise</button>
+          <button class="btn ghost">Cancel</button>
+          <button class="btn danger">Delete client</button>
+          <button class="btn primary" disabled>Disabled</button>
+        </div>
+        <div class="sg-row">
+          <button class="btn primary small">+ Add client</button>
+          <button class="btn ghost small">Edit</button>
+          <button class="btn ghost small danger-text">Delete</button>
+          <button class="btn icon" aria-label="Move up">↑</button>
+          <button class="btn icon" aria-label="Remove">✕</button>
+        </div>
+      </section>
+
+      <section>
+        <h3>Form fields</h3>
+        <label class="field"><span class="field-label">Full name</span><input value="Amy Adams"></label>
+        <label class="field"><span class="field-label">Email</span><input type="email" placeholder="you@example.com"><span class="muted small">Your client signs in with this email.</span></label>
+        <label class="field"><span class="field-label">Notes</span><textarea rows="2" placeholder="Warm-up, focus points, how it should feel…"></textarea></label>
+        <p class="error">That email isn't registered yet.</p>
+      </section>
+
+      <section>
+        <h3>Navigation</h3>
+        <div class="tabs" role="tablist">
+          <button class="tab active" role="tab" aria-selected="true">My workouts</button>
+          <button class="tab" role="tab" aria-selected="false">Chat with Emily</button>
+        </div>
+        <nav class="client-list" style="padding:0;max-width:var(--sidebar-width)">
+          <button class="client-item active"><span class="client-name">Amy Adams</span><span class="muted small">amy@example.com</span></button>
+          <button class="client-item"><span class="client-name">Ben Brown <span class="dot" title="New message"></span></span><span class="muted small">ben@example.com</span></button>
+        </nav>
+        <div class="goals"><p class="eyebrow">Your goals</p><p>Run a 10k in spring</p></div>
+      </section>
+
+      <section>
+        <h3>Workout cards</h3>
+        <div class="stack">
+          <article class="card workout">
+            <div class="row-between top">
+              <div>
+                <p class="eyebrow">Tue, 1 Dec 2026</p>
+                <h4>Lower body strength</h4>
+              </div>
+              <div class="actions"><button class="btn ghost small">Edit</button><button class="btn ghost small">Duplicate</button><button class="btn ghost small danger-text">Delete</button></div>
+            </div>
+            <p class="notes">Warm up 10 min on the bike.</p>
+            <ol class="exercise-list">
+              <li><span class="ex-title">Back squat</span><span class="ex-meta">4 sets · 8 reps · 50 kg · rest 90s</span><span class="ex-notes">Slow on the way down</span></li>
+              <li><span class="ex-title">Plank</span><span class="ex-meta">3 sets · 45s reps · rest 30s</span></li>
+            </ol>
+            <div class="row-end"><button class="btn primary">Mark as done</button></div>
+          </article>
+          <article class="card workout draft">
+            <p class="eyebrow">Thu, 3 Dec 2026</p>
+            <h4>Conditioning intervals</h4>
+            <span class="badge">Draft · not visible to Amy</span>
+            <div class="row-end"><button class="btn primary">Publish</button></div>
+          </article>
+          <article class="card workout done">
+            <p class="eyebrow">Mon, 30 Nov 2026</p>
+            <h4>Upper body push</h4>
+            <span class="badge">✓ Done · 30 Nov, 18:02</span>
+            <div class="row-end"><button class="btn">Mark as not done</button></div>
+          </article>
+        </div>
+      </section>
+
+      <section>
+        <h3>Lifting</h3>
+        <article class="card">
+          <ol class="exercise-list">
+            <li>
+              <span class="ex-title">Back squat</span>
+              <span class="ex-meta">4 sets · 8 reps · 70% of 1RM · rest 90s</span>
+              <span class="ex-target">Your weight: 65 kg (70% of estimated 1RM 93.3 kg)</span>
+              <span class="ex-logged"><strong>Logged: </strong>65 kg × 8 @ 7 · 65 kg × 8 · 85 kg × 5</span>
+              <details class="howto" open><summary>How to</summary><p>Brace, sit between the hips, drive up.</p><a class="btn small" href="#">Watch demo ↗</a></details>
+            </li>
+          </ol>
+          <div class="set-rows">
+            <div class="set-row set-head"><span>Set</span><span>kg</span><span>Reps</span><span>Effort</span><span></span></div>
+            <div class="set-row"><span class="set-num">1</span><input type="number" value="65"><input type="number" value="8"><input type="number" placeholder="1–10"><button class="btn icon" aria-label="Remove set">✕</button></div>
+          </div>
+          <div class="chips"><span class="chip estimate">Est. 1RM 99.2 kg</span><span class="chip">5RM 85 kg</span></div>
+          <div class="ex-grid" style="margin-top:var(--space-4)">
+            <label class="mini-field"><span>Sets</span><input value="4"></label>
+            <label class="mini-field"><span>% of max</span><input value="70"></label>
+            <label class="mini-field"><span>Of</span><select><option>of 1RM</option></select></label>
+          </div>
+        </article>
+      </section>
+
+      <section class="workout-page">
+        <h3>Workout page</h3>
+        <div class="stack">
+          <div class="rest-bar" style="position:static">
+            <span class="eyebrow">Rest timer</span>
+            <div class="timer-controls"><button class="btn icon timer-step" aria-label="Shorter rest">−</button><span class="timer-time">1:30</span><button class="btn icon timer-step" aria-label="Longer rest">+</button><button class="btn primary small">Start rest</button></div>
+          </div>
+          <div class="rest-bar running" style="position:static">
+            <span class="eyebrow">Resting</span>
+            <div class="timer-controls"><span class="timer-time">1:00</span><button class="btn small">+15s</button><button class="btn ghost small">Stop</button></div>
+          </div>
+          <div class="set-rows">
+            <div class="set-row set-head"><span>Set</span><span>kg</span><span>Reps</span><span>Effort</span><span>Done</span></div>
+            <div class="set-row done"><span class="set-num">1</span><input type="number" value="65"><input type="number" value="8"><input type="number" placeholder="1–10"><button class="set-check" aria-pressed="true" aria-label="Done">✓</button></div>
+            <div class="set-row"><span class="set-num">2</span><input type="number" placeholder="65"><input type="number" placeholder="8"><input type="number" placeholder="1–10"><button class="set-check" aria-pressed="false" aria-label="Done">✓</button></div>
+          </div>
+          <p class="muted small">The plate calculator is drawn by the app, so open a barbell exercise in "Start workout" to see it. Plate colours: <code>--plate-25</code> to <code>--plate-1-25</code> in design-tokens.css.</p>
+        </div>
+      </section>
+
+      <section>
+        <h3>Sessions</h3>
+        <div class="stack">
+          <article class="card session">
+            <p class="eyebrow">Tuesday, 3 December</p>
+            <h4>6:00 PM – 7:00 PM</h4>
+            <p class="muted small">Studio · 60 min</p>
+          </article>
+          <article class="card session cancelled">
+            <p class="eyebrow">Thursday, 5 December</p>
+            <h4>7:00 AM – 7:45 AM</h4>
+            <p class="muted small">Park · 45 min</p>
+            <span class="badge">Cancelled by you</span>
+          </article>
+          <p class="callout warning">This is less than 24 hours' notice. Emily's cancellation policy may still apply.</p>
+        </div>
+      </section>
+
+      <section>
+        <h3>Notice board</h3>
+        <article class="card notice">
+          <p class="eyebrow">Pinned · Sat, 7 Nov 2026</p>
+          <h4>Studio closed Monday</h4>
+          <span class="badge">New</span>
+          <p class="notice-body">Bank holiday, so no sessions. Back Tuesday!</p>
+        </article>
+        <label class="check" style="margin-top:var(--space-4)"><input type="checkbox" checked><span>Pin to the top of their workouts page</span></label>
+        <label class="check"><input type="radio" name="sg-a" checked><span>All clients</span></label>
+      </section>
+
+      <section>
+        <h3>Check-in and feedback</h3>
+        <div class="chips">
+          <button class="chip-toggle" aria-pressed="true">On my period</button>
+          <button class="chip-toggle" aria-pressed="false">Night shift</button>
+          <button class="chip-toggle" aria-pressed="false">Tired</button>
+        </div>
+        <div class="feedback">
+          <p class="eyebrow">Amy's notes</p>
+          <div class="chips"><span class="chip">On my period</span><span class="chip">Night shift</span></div>
+          <p class="small">Third night in a row</p>
+          <p class="feedback-comment">Squats felt heavy but good. Knee fine.</p>
+        </div>
+      </section>
+
+      <section>
+        <h3>Consult notes</h3>
+        <div class="stack">
+          <div class="callout">
+            <div><p class="eyebrow">No account yet</p><p>When you're ready, add Nat's email to create their account.</p></div>
+            <button class="btn primary small">Add email</button>
+          </div>
+          <section class="card notes-card">
+            <div class="row-between"><p class="eyebrow">Private · only you see this</p><span class="muted small">Saved 9:50 AM</span></div>
+            <h4>Initial consult</h4>
+            <p class="muted small">Quick notes are fine. They save as you type.</p>
+            <label class="field"><span class="field-label">Injuries and conditions</span><textarea rows="2">Lower back niggle, avoid heavy deadlifts</textarea></label>
+          </section>
+          <section class="card shared-card">
+            <div class="row-between"><p class="eyebrow">Visible to Nat</p><span class="muted small">Saved 9:50 AM</span></div>
+            <h4>Their goals</h4>
+            <p class="muted small">This appears at the top of Nat's page as "Your goals".</p>
+            <label class="field"><span class="field-label">Goals</span><textarea rows="2">Get hiking-fit for your summer trip, with a strong, happy back.</textarea></label>
+          </section>
+          <div class="goals"><p class="eyebrow">Injuries and conditions · private</p><p>Lower back niggle, avoid heavy deadlifts</p></div>
+        </div>
+      </section>
+
+      <section>
+        <h3>Chat</h3>
+        <div class="chat">
+          <div class="messages" style="height:auto">
+            <div class="bubble theirs"><p>Hi! Knee felt fine today.</p><time>7 Nov, 10:00</time></div>
+            <div class="bubble mine"><p>Great, keep it up! Add 2.5 kg next session.</p><time>7 Nov, 10:04</time></div>
+          </div>
+          <form class="composer" onsubmit="return false"><textarea rows="2" placeholder="Write a message…" aria-label="Message"></textarea><button class="btn primary">Send</button></form>
+        </div>
+      </section>
+
+      <section>
+        <h3>Notifications</h3>
+        <div class="sg-row">
+          <div class="toast sg-static-toast">Workout saved</div>
+          <div class="toast error sg-static-toast">Something went wrong</div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    // Read the palette and spacing straight from design-tokens.css so this
+    // page never goes out of date.
+    const styles = getComputedStyle(document.documentElement);
+    const tokens = [];
+    const declared = {};
+    for (const sheet of document.styleSheets) {
+      if (!sheet.href || !sheet.href.endsWith('design-tokens.css')) continue;
+      for (const rule of sheet.cssRules) {
+        if (rule.selectorText === ':root') for (const name of rule.style) if (name.startsWith('--')) { tokens.push(name); declared[name] = rule.style.getPropertyValue(name); }
+      }
+    }
+    const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; };
+    // Palette colours are the ones defined with a raw value, not var(...).
+    const raw = (name) => !declared[name].includes('var(');
+    const swatches = document.getElementById('swatches');
+    for (const name of tokens.filter((t) => t.startsWith('--color-') && raw(t))) {
+      const card = el('div', 'sg-swatch');
+      const chip = el('div', 'sg-swatch-color');
+      chip.style.background = `var(${name})`;
+      const label = el('div', 'sg-swatch-label', name.replace('--color-', '').replace(/-/g, ' '));
+      label.append(el('code', '', `${name}: ${styles.getPropertyValue(name).trim()}`));
+      card.append(chip, label);
+      swatches.append(card);
+    }
+    const spacing = document.getElementById('spacing');
+    for (const name of tokens.filter((t) => t.startsWith('--space-'))) {
+      const row = el('div', 'sg-space');
+      const bar = el('div', 'sg-space-bar');
+      bar.style.width = `var(${name})`;
+      const label = el('span', 'small', name);
+      label.append(el('code', '', styles.getPropertyValue(name).trim()));
+      row.append(bar, label);
+      spacing.append(row);
+    }
+  </script>
+</body>
+</html>
