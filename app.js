@@ -177,39 +177,119 @@ function renderSetupNeeded() {
     h('p', {}, 'Add your Supabase project URL and key to config.js. The README explains each step.'))));
 }
 
+// Sign in without a password: we email a link AND a code. The code matters
+// on iPhones, where an app saved to the home screen has its own sign-in,
+// separate from Safari (where email links open).
 function renderLogin() {
-  const email = h('input', { type: 'email', id: 'email', required: true, placeholder: 'you@example.com', autocomplete: 'email' });
-  const status = h('p', { class: 'muted', 'aria-live': 'polite' });
-  const btn = h('button', { type: 'submit', class: 'btn primary block' }, 'Email me a sign-in link');
-  const form = h('form', {
-    class: 'narrow login',
-    onsubmit: async (e) => {
-      e.preventDefault();
-      const address = email.value.trim();
-      btn.disabled = true;
-      status.className = 'muted';
-      status.textContent = 'Sending…';
-      const { error } = await sb.auth.signInWithOtp({
-        email: address,
-        options: { emailRedirectTo: location.origin + location.pathname },
-      });
-      btn.disabled = false;
-      if (error) {
-        status.className = 'error';
-        status.textContent = friendlyAuthError(error);
-      } else {
-        status.textContent = `Check ${address} for your sign-in link. Open it on this device.`;
-      }
-    },
-  },
+  // Remember who's mid-sign-in for an hour, in case the phone reloads the
+  // page while they switch to their email.
+  let pending = null;
+  try {
+    const saved = JSON.parse(localStorage.getItem('empt:login-email') || 'null');
+    if (saved && Date.now() - saved.at < 3600e3) pending = saved.email;
+  } catch { /* no storage: start fresh */ }
+  const remember_ = (address) => {
+    try {
+      if (address) localStorage.setItem('empt:login-email', JSON.stringify({ email: address, at: Date.now() }));
+      else localStorage.removeItem('empt:login-email');
+    } catch { /* ignore */ }
+  };
+  const brand = () => [
     h('div', { class: 'login-brand brand' }, h('img', { src: 'icon.svg', alt: '', width: '32', height: '32' }), APP_NAME),
     h('p', { class: 'eyebrow' }, 'Personal training'),
-    h('h1', { class: 'display' }, 'Your training, ', h('em', {}, 'personalised'), '.'),
-    h('p', { class: 'lead' }, `Sign in to see your workouts and chat with ${TRAINER_NAME}. No password needed.`),
-    field('Email', email),
-    btn,
-    status);
-  mount(h('main', { class: 'center' }, form));
+  ];
+
+  async function send(address, status, btn) {
+    btn.disabled = true;
+    status.className = 'muted';
+    status.textContent = 'Sending…';
+    const { error } = await sb.auth.signInWithOtp({
+      email: address,
+      options: { emailRedirectTo: location.origin + location.pathname },
+    });
+    btn.disabled = false;
+    if (error) {
+      status.className = 'error';
+      status.textContent = friendlyAuthError(error);
+      return false;
+    }
+    status.textContent = '';
+    return true;
+  }
+
+  function askEmail() {
+    const email = h('input', { type: 'email', id: 'email', required: true, placeholder: 'you@example.com', autocomplete: 'email', value: pending || '' });
+    const status = h('p', { class: 'muted', 'aria-live': 'polite' });
+    const btn = h('button', { type: 'submit', class: 'btn primary block' }, 'Email me a sign-in code');
+    mount(h('main', { class: 'center' }, h('form', {
+      class: 'narrow login',
+      onsubmit: async (e) => {
+        e.preventDefault();
+        const address = email.value.trim().toLowerCase();
+        if (await send(address, status, btn)) { pending = address; remember_(address); askCode(); }
+      },
+    },
+      brand(),
+      h('h1', { class: 'display' }, 'Your training, ', h('em', {}, 'personalised'), '.'),
+      h('p', { class: 'lead' }, `Sign in to see your workouts and chat with ${TRAINER_NAME}. No password needed.`),
+      field('Email', email),
+      btn,
+      status,
+      h('p', { class: 'muted small login-foot' }, h('a', { href: 'privacy.html' }, 'How your information is looked after')))));
+  }
+
+  function askCode() {
+    const code = h('input', {
+      id: 'code', required: true, inputmode: 'numeric', autocomplete: 'one-time-code', maxlength: '14',
+      placeholder: '123456', class: 'code-input', 'aria-describedby': 'code-help',
+    });
+    const status = h('p', { class: 'muted', 'aria-live': 'polite' });
+    const btn = h('button', { type: 'submit', class: 'btn primary block' }, 'Sign in');
+    const resend = h('button', {
+      type: 'button', class: 'btn ghost small',
+      onclick: async () => { if (await send(pending, status, resend)) { status.className = 'muted'; status.textContent = 'A new code is on its way.'; } },
+    }, 'Send a new code');
+    mount(h('main', { class: 'center' }, h('form', {
+      class: 'narrow login',
+      onsubmit: async (e) => {
+        e.preventDefault();
+        // Codes are pasted or typed with spaces sometimes: keep just the digits.
+        const token = code.value.replace(/\D/g, '');
+        if (token.length < 6 || token.length > 10) {
+          status.className = 'error';
+          status.textContent = 'The code is the 6-digit number in the email.';
+          return;
+        }
+        btn.disabled = true;
+        status.className = 'muted';
+        status.textContent = 'Checking…';
+        const { error } = await sb.auth.verifyOtp({ email: pending, token, type: 'email' });
+        btn.disabled = false;
+        if (error) {
+          status.className = 'error';
+          status.textContent = /expired|invalid/i.test(error.message)
+            ? 'That code didn’t work. Check the numbers, or send a new code (each one only lasts a little while).'
+            : friendlyAuthError(error);
+          return;
+        }
+        remember_(null);
+        status.textContent = 'Signed in!';
+      },
+    },
+      brand(),
+      h('h1', { class: 'display' }, 'Check your ', h('em', {}, 'email')),
+      h('p', { class: 'lead' }, `We’ve sent a sign-in email to ${pending}.`),
+      h('p', { id: 'code-help', class: 'muted small' }, 'Type the code from the email here. (Or tap the link in the email, if you’re on the same device and not using the app from your home screen.)'),
+      field('Sign-in code', code),
+      btn,
+      status,
+      h('div', { class: 'row-between login-more' },
+        h('button', { type: 'button', class: 'btn ghost small', onclick: () => { pending = null; remember_(null); askEmail(); } }, 'Use a different email'),
+        resend))));
+    code.focus();
+  }
+
+  if (pending) askCode(); else askEmail();
 }
 
 function renderNotLinked() {
@@ -716,7 +796,7 @@ function renderHealthForm({ first }) {
     h('p', { class: 'lead' }, first
       ? `Before you start, ${TRAINER_NAME} needs a few details so your training is safe and suits you. It takes about 5 minutes.`
       : `Keep these up to date so ${TRAINER_NAME} can plan around them.`),
-    h('p', { class: 'muted small' }, `Only you and ${TRAINER_NAME} can see your answers.`),
+    h('p', { class: 'muted small' }, `Only you and ${TRAINER_NAME} can see your answers. `, h('a', { href: 'privacy.html' }, 'How your information is looked after')),
     form));
   showFlag();
 }
@@ -1989,8 +2069,9 @@ async function renderClientHome(body) {
       noticesBlock,
       winsBlock,
       progressRow,
-      state.health ? h('p', { class: 'muted small home-foot' },
-        h('button', { class: 'link', onclick: () => { state.editHealth = true; renderClientApp(); } }, 'Update my health details')) : null));
+      h('p', { class: 'muted small home-foot' },
+        state.health ? [h('button', { class: 'link', onclick: () => { state.editHealth = true; renderClientApp(); } }, 'Update my health details'), ' · '] : null,
+        h('a', { href: 'privacy.html' }, 'Privacy'))));
   if (thisWeek.hit) celebrateWeek(stats);
   shareNewWins(workouts, stats);
 }

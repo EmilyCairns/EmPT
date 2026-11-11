@@ -16,7 +16,10 @@ The pages are hosted free on **GitHub Pages**. Logins, workouts and messages are
 | `styleguide.html` | Live preview of the design system |
 | `config.js` | Your Supabase details and display names. **The only file you need to edit for setup.** |
 | `supabase/schema.sql` | Sets up the database. Paste it into Supabase once. |
-| `manifest.webmanifest`, `icon.svg` | Lets clients "Add to Home Screen" on their phone |
+| `manifest.webmanifest`, `icon.svg`, `icons/` | Lets clients "Add to Home Screen" on their phone (with a proper app icon) |
+| `privacy.html` | The privacy page clients can read. Fill in your business name and email. |
+| `supabase/email-templates.md` | Sign-in emails to paste into Supabase (they include the 6-digit code) |
+| `docs/welcome-message.md` | A message to send new clients |
 
 ## One-time setup (about 15 minutes)
 
@@ -48,9 +51,29 @@ In Supabase, open **Authentication → URL Configuration**:
 
 Sign-in links won't work without this.
 
-### 5. Set up sign-in emails (strongly recommended)
+### 5. Set up sign-in emails (needed before real clients)
 
-Supabase's built-in email sender only allows a few sign-in emails per hour. That's enough for testing but not for real clients. Under **Authentication → Emails → SMTP Settings**, connect a free email service such as Resend, Brevo or Postmark. In the same area you can also reword the "Magic Link" email so it sounds like you.
+Clients sign in with a **6-digit code** (or a link) emailed to them. Two things to do in Supabase:
+
+1. **Send the code in the email.** Under **Authentication → Emails → Templates**, paste the **Magic Link** and **Confirm signup** templates from `supabase/email-templates.md`. Without this the emails only contain a link, and sign-in won't work in the app saved to an iPhone home screen.
+2. **Use a proper email sender.** Supabase's built-in sender only allows a few emails an hour. Under **Authentication → Emails → SMTP Settings**, connect a free email service such as Resend, Brevo or Postmark.
+
+### 6. Finish the privacy page
+
+Open `privacy.html` and replace **[your business name]** and **[your contact email]**. It's linked from the sign-in screen, the health form and the bottom of every client's Home page. It's a plain-English starting point, not legal advice: check it with your insurer or professional association.
+
+### 7. Test it, then invite clients
+
+Sign in as yourself on a computer, then as the test client on your phone (add it to your home screen too). Then, for each client: **+ New client**, add their email in **Edit client**, and send them the message in `docs/welcome-message.md`.
+
+## Saving it on a phone like an app
+
+No app store needed. Clients open the link and:
+
+- **iPhone:** in **Safari**, tap **Share → Add to Home Screen**.
+- **Android:** in **Chrome**, tap **⋮ → Add to Home screen** (or **Install app**).
+
+It then opens full-screen from its own terracotta icon. On iPhone the home-screen app has its own sign-in, separate from Safari, so clients type the 6-digit code there (email links open in Safari).
 
 ## Everyday use
 
