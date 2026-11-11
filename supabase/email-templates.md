@@ -68,5 +68,5 @@ Welcome to EmPT: your sign-in code {{ .Token }}
 - **Authentication → Emails → SMTP Settings:** connect an email service (for
   example Resend) so you aren't limited to a few emails an hour.
 - **Authentication → URL Configuration:** Site URL
-  `https://emilycairns.github.io/EmPT/` and redirect URL
-  `https://emilycairns.github.io/EmPT/**`.
+  `https://app.emilycairns.com.au/` and redirect URL
+  `https://app.emilycairns.com.au/**`.

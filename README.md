@@ -34,11 +34,18 @@ The pages are hosted free on **GitHub Pages**. Logins, workouts and messages are
 1. In Supabase, open **Project Settings → API** (on newer projects, **API Keys**). Copy the **Project URL** and the **anon / publishable key**. Never use the `service_role` or secret key.
 2. Edit `config.js` in this repo and paste them in. You can also change `TRAINER_NAME` here. These values are safe to make public.
 
-### 3. Turn on GitHub Pages
+### 3. Turn on GitHub Pages, at your own address
+
+The app lives at **https://app.emilycairns.com.au** (the `CNAME` file in this repo tells GitHub Pages so). `emilycairns.com.au` itself is kept for your business website.
 
 1. Merge this work into the `main` branch.
 2. In GitHub, open **Settings → Pages**. Under **Source**, choose **Deploy from a branch**, then branch `main`, folder `/ (root)`, and click **Save**.
-3. After a minute or two the app is live at `https://emilycairns.github.io/EmPT/`.
+3. At your domain registrar, open the DNS settings for `emilycairns.com.au` and add one record:
+   - **Type:** `CNAME` · **Host/Name:** `app` · **Value/Points to:** `emilycairns.github.io` · TTL: default
+4. Back in **Settings → Pages**, check **Custom domain** shows `app.emilycairns.com.au` (type it and **Save** if not). When the DNS check turns green (minutes to a few hours), tick **Enforce HTTPS**.
+5. Recommended, to stop anyone else using your domain on GitHub: your GitHub profile → **Settings → Pages → Add a domain** → `emilycairns.com.au`, and add the `TXT` record it shows you at your registrar.
+
+Until the website is built, you can point `emilycairns.com.au` at the app using your registrar's **URL forwarding** (forward to `https://app.emilycairns.com.au`).
 
 GitHub Pages on a free account needs the repository to be public. That's fine: the code holds no private data. Your clients' data lives in Supabase.
 
@@ -46,8 +53,8 @@ GitHub Pages on a free account needs the repository to be public. That's fine: t
 
 In Supabase, open **Authentication → URL Configuration**:
 
-- **Site URL:** `https://emilycairns.github.io/EmPT/`
-- **Redirect URLs:** add `https://emilycairns.github.io/EmPT/**`
+- **Site URL:** `https://app.emilycairns.com.au/`
+- **Redirect URLs:** add `https://app.emilycairns.com.au/**` (and `http://localhost:8000/**` if you test locally)
 
 Sign-in links won't work without this.
 
