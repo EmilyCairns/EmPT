@@ -1554,3 +1554,11 @@ button.link:focus-visible { outline: var(--border-width-strong) solid var(--colo
 .log-group .eyebrow { margin: 0; }
 .group-how { margin: var(--space-1) 0 0; }
 .log-ex.in-group { margin-top: var(--space-4); padding-top: var(--space-4); border-top: var(--border-width) solid var(--color-border); }
+/* Warm-up: one card listing what to do, with a single tick. Nothing to log. */
+.log-warmup .eyebrow { margin: 0 0 var(--space-2); }
+.warmup-list { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.warmup-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); }
+.warmup-list .ex-meta { display: inline; }
+.warmup-list .ex-notes { flex-basis: 100%; margin: 0; color: var(--color-text-muted); }
+.warmup-tick { margin-top: var(--space-4); font-weight: var(--weight-semibold); }
+.log-warmup.is-done .warmup-list { opacity: 0.6; }
