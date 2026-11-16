@@ -766,7 +766,7 @@ function renderHealthForm({ first }) {
   },
     h('section', { class: 'card' },
       h('p', { class: 'eyebrow' }, '1 · About you'),
-      field('Your birthday', birthday, `So ${TRAINER_NAME} can wish you a happy birthday.`)),
+      field('Your birthday', birthday)),
     h('section', { class: 'card' },
       h('p', { class: 'eyebrow' }, '2 · Health check'),
       h('p', { class: 'muted small' }, 'The standard Australian pre-exercise screening questions. Please answer every one.'),

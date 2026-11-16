@@ -1542,7 +1542,8 @@ button.link:focus-visible { outline: var(--border-width-strong) solid var(--colo
 .workout-page .log-ex .ex-target { padding-left: calc(var(--space-6) + var(--space-3)); }
 .workout-page .set-rows { gap: var(--space-1); margin: var(--space-3) 0 var(--space-2); }
 .workout-page .set-row input { height: var(--control-height-sm); padding-block: 0; }
-.workout-page .set-rows.no-kg .set-row { grid-template-columns: var(--space-8) 1fr; }
+/* No kg box: the reps box keeps a sensible width instead of filling the row. */
+.workout-page .set-rows.no-kg .set-row { grid-template-columns: var(--space-8) minmax(0, calc(var(--space-20) + var(--space-12))); }
 .workout-page .set-prev { margin: 0 0 var(--space-1); }
 .ex-actions { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-5); margin-top: var(--space-1); }
 .link-btn { padding: var(--space-1) 0; border: 0; background: none; color: var(--color-accent-text); font: inherit; font-size: var(--text-body-sm); font-weight: var(--weight-semibold); cursor: pointer; }
