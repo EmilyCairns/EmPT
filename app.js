@@ -2218,10 +2218,14 @@ function targetFor(e, maxes) {
   return { pct, rm, base, estimated: true, kg: roundLoad((base * pct) / 100) };
 }
 
+// "8" or "6-8" read as "8 reps"; anything else ("30 sec", "8 each leg",
+// "Until fatigue") is shown as written.
+const repsText = (r) => (/^\s*\d+(\s*[-–]\s*\d+)?\s*$/.test(r) ? `${r.trim()} reps` : r);
+
 function prescription(e) {
   return [
     e.sets && `${e.sets} sets`,
-    e.reps && `${e.reps} reps`,
+    e.reps && repsText(e.reps),
     Number(e.pct) > 0 && `${e.pct}% of ${parseInt(e.rm, 10) || 1}RM`,
     e.load,
     e.rest && `rest ${e.rest}`,
@@ -2832,7 +2836,7 @@ async function renderWorkoutPage() {
     // One short line: sets, reps, their weight, rest.
     const plan = [
       e.sets && `${e.sets} sets`,
-      e.reps && `${e.reps} reps`,
+      e.reps && repsText(e.reps),
       target && !target.missing ? `${kg(target.kg)} (${target.pct}% of ${target.rm}RM)` : Number(e.pct) > 0 ? `${e.pct}% of ${parseInt(e.rm, 10) || 1}RM` : null,
       e.load,
       e.rest && `rest ${e.rest}`,
