@@ -1355,7 +1355,8 @@ function refreshPanelSummary(c) {
   if (el && fresh) el.replaceWith(fresh);
 }
 
-const blankExercise = () => ({ name: '', exercise_id: '', sets: '', reps: '', pct: '', rm: '1', load: '', rest: '', notes: '' });
+const blankExercise = () => ({ name: '', exercise_id: '', sets: '', reps: '', pct: '', rm: '1', load: '', rest: '', notes: '', group: '' });
+const GROUP_CHOICES = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 const RM_CHOICES = [1, 2, 3, 4, 5, 6, 8, 10];
 
 // opts.template = { label, onSave(payload) } edits a program's workout
@@ -1381,6 +1382,9 @@ function openWorkoutEditor(client, workout, onSaved, opts = {}) {
         h('input', { value: r[key] || '', placeholder, 'aria-label': placeholder, class: cls, oninput: (e) => { r[key] = e.target.value; }, ...extra });
       // Small visible labels, so filled-in boxes still say what they are.
       const mini = (label, control) => h('label', { class: 'mini-field' }, h('span', { 'aria-hidden': 'true' }, label), control);
+      const groupSelect = h('select', { 'aria-label': 'Superset', onchange: (e) => { r.group = e.target.value; } },
+        h('option', { value: '' }, 'No'),
+        GROUP_CHOICES.map((g) => h('option', { value: g, selected: String(r.group || '').toUpperCase() === g }, `Superset ${g}`)));
       const rmSelect = h('select', { 'aria-label': 'Percentage of which rep max', onchange: (e) => { r.rm = e.target.value; } },
         RM_CHOICES.map((n) => h('option', { value: String(n), selected: String(r.rm || '1') === String(n) }, `of ${n}RM`)));
       return h('div', { class: 'ex-row' },
@@ -1397,7 +1401,8 @@ function openWorkoutEditor(client, workout, onSaved, opts = {}) {
           state.lifting ? mini('% of max', input('pct', '% of max (e.g. 70)', '', { inputmode: 'decimal' })) : null,
           state.lifting ? mini('Of', rmSelect) : null,
           mini('Load', input('load', 'Load (e.g. 20 kg)')),
-          mini('Rest', input('rest', 'Rest (e.g. 90s)'))),
+          mini('Rest', input('rest', 'Rest (e.g. 90s)')),
+          mini('Superset', groupSelect)),
         input('notes', 'Coaching notes (optional)'));
     }));
   }
@@ -1415,7 +1420,7 @@ function openWorkoutEditor(client, workout, onSaved, opts = {}) {
       logNow ? null : field('Notes', notes),
       libraryDatalist(),
       h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Exercises'),
-        logNow ? null : h('span', { class: 'muted small' }, 'Pick from your library or type a new name (new names are added to the library). For a percentage, fill in "% of max" and choose which rep max; the client sees the weight worked out for them.'),
+        logNow ? null : h('span', { class: 'muted small' }, 'Pick from your library or type a new name (new names are added to the library). For a percentage, fill in "% of max" and choose which rep max; the client sees the weight worked out for them. For a superset, give exercises next to each other the same letter: the sets on the first are the rounds, and the rest on the last is the rest after each round.'),
         exList,
         h('button', { type: 'button', class: 'btn', onclick: () => { rows.push(blankExercise()); drawRows(); exList.lastChild?.querySelector('input')?.focus(); } }, '+ Add exercise')),
     ],
@@ -1485,7 +1490,7 @@ function openWorkoutView(t, { label = '', onEdit = null } = {}) {
     h('h2', { id: 'workout-view-title' }, t.title || 'Workout'),
     t.notes ? h('p', { class: 'notes' }, t.notes) : null,
     exercises.length
-      ? h('ol', { class: 'exercise-list' }, exercises.map((e) => h('li', {},
+      ? h('ol', { class: 'exercise-list' + (hasGroups(exercises) ? ' lettered' : '') }, exercises.map((e, i) => h('li', { 'data-label': exerciseLabels(exercises)[i] },
           h('span', { class: 'ex-title' }, e.name),
           prescription(e) ? h('span', { class: 'ex-meta' }, prescription(e)) : null,
           e.notes ? h('span', { class: 'ex-notes' }, e.notes) : null)))
@@ -1504,6 +1509,7 @@ function openWorkoutView(t, { label = '', onEdit = null } = {}) {
 
 function workoutCard(w, { actions = [], onChange, trainerFor, maxes = [], logs = [], feedback = null, onLog, inRow = false }) {
   const exercises = Array.isArray(w.exercises) ? w.exercises : [];
+  const labels = exerciseLabels(exercises);
   const done = !!w.completed_at;
   const draft = !!w.is_draft;
   const myLogs = logs.filter((l) => l.workout_id === w.id);
@@ -1552,10 +1558,10 @@ function workoutCard(w, { actions = [], onChange, trainerFor, maxes = [], logs =
         actions.map(([label, fn]) => h('button', { class: 'btn ghost small' + (label === 'Delete' ? ' danger-text' : ''), onclick: fn }, label))) : null),
     w.notes ? h('p', { class: 'notes' }, w.notes) : null,
     exercises.length
-      ? h('ol', { class: 'exercise-list' }, exercises.map((e, i) => {
+      ? h('ol', { class: 'exercise-list' + (hasGroups(exercises) ? ' lettered' : '') }, exercises.map((e, i) => {
           const target = state.lifting ? targetFor(e, maxes) : null;
           const sets = myLogs.filter((l) => l.exercise_index === i).sort((a, b) => a.set_number - b.set_number);
-          return h('li', {},
+          return h('li', { 'data-label': labels[i] },
             h('span', { class: 'ex-title' }, e.name),
             prescription(e) ? h('span', { class: 'ex-meta' }, prescription(e)) : null,
             target ? h('span', { class: 'ex-target' }, targetText(target, who)) : null,
@@ -2255,6 +2261,36 @@ function targetFor(e, maxes) {
 // "Until fatigue") is shown as written.
 const repsText = (r) => (/^\s*\d+(\s*[-–]\s*\d+)?\s*$/.test(r) ? `${r.trim()} reps` : r);
 
+// Supersets: neighbouring exercises with the same `group` letter are done
+// back to back. Splits a workout into sections (one exercise, or a
+// superset with its rounds and the rest after each round).
+function exerciseSections(exercises) {
+  const out = [];
+  exercises.forEach((e, i) => {
+    const g = String(e.group || '').trim().toUpperCase();
+    const last = out.at(-1);
+    if (g && last?.group === g) last.items.push({ e, i });
+    else out.push({ group: g || null, items: [{ e, i }] });
+  });
+  for (const sec of out) {
+    if (sec.group && sec.items.length < 2) sec.group = null; // a superset of one is just an exercise
+    sec.rounds = sec.items[0].e.sets || '';
+    sec.rest = sec.items.at(-1).e.rest || '';
+  }
+  return out;
+}
+const hasGroups = (exercises) => exerciseSections(exercises).some((sec) => sec.group);
+// "A1", "A2", "B"… for every exercise, in order.
+function exerciseLabels(exercises) {
+  const labels = [];
+  exerciseSections(exercises).forEach((sec, k) => sec.items.forEach((x, m) => { labels[x.i] = sec.group ? `${letter(k)}${m + 1}` : letter(k); }));
+  return labels;
+}
+// "30 sec", "45-60 sec", "1 min", "40s": a hold or stretch timed in seconds.
+const isTimed = (e) => /\d\s*(s|sec|secs|seconds?)\b|\bmin(s|utes?)?\b/i.test(String(e.reps || ''));
+// "60s" → "60 sec" for sentences.
+const restLabel = (r) => String(r).trim().replace(/^(\d+)\s*s$/i, '$1 sec');
+
 function prescription(e) {
   return [
     e.sets && `${e.sets} sets`,
@@ -2315,7 +2351,7 @@ function openLogDialog(w, { clientId, maxes, logs, feedback = null, asTrainer, o
     draw();
 
     const el = h('section', { class: 'log-ex' },
-      h('p', { class: 'eyebrow' }, String(i + 1).padStart(2, '0')),
+      h('p', { class: 'eyebrow' }, hasGroups(exercises) ? exerciseLabels(exercises)[i] : String(i + 1).padStart(2, '0')),
       h('h4', {}, e.name),
       prescription(e) ? h('p', { class: 'ex-meta' }, prescription(e)) : null,
       target ? h('p', { class: 'ex-target' }, targetText(target, asTrainer ? 'Target' : null)) : null,
@@ -2813,44 +2849,72 @@ async function renderWorkoutPage() {
   // How hard the whole workout felt, 1–10 (asked once at the end, not per set).
   let effort = draft?.effort ?? fb?.effort ?? null;
 
-  const blocks = exercises.map((e, i) => {
+  // Progress: an exercise is done once every one of its sets has reps.
+  const progressText = h('span', { class: 'wp-progress-text' });
+  const progressFill = h('span', { class: 'wp-progress-fill' });
+  const progress = h('div', { class: 'wp-progress', role: 'status', 'aria-live': 'polite' },
+    progressText, h('span', { class: 'wp-progress-bar', 'aria-hidden': 'true' }, progressFill));
+  const showProgress = () => {
+    const n = blocks.filter((b) => b.isDone()).length;
+    progressText.textContent = `${n} of ${blocks.length} exercise${blocks.length === 1 ? '' : 's'} done`;
+    progressFill.style.width = `${blocks.length ? Math.round((n / blocks.length) * 100) : 0}%`;
+  };
+
+  const sections = exerciseSections(exercises);
+  const anyGroups = sections.some((sec) => sec.group);
+  const blocks = [];
+  sections.forEach((sec, k) => {
+    sec.items.forEach(({ e, i }, m) => {
+      // Letters when there are supersets (A, B1, B2, C); plain numbers otherwise.
+      const label = !anyGroups ? String(i + 1) : sec.group ? `${letter(k)}${m + 1}` : letter(k);
+      // In a superset only the last exercise rests; the others go straight on.
+      const restAfter = sec.group ? (m === sec.items.length - 1 ? sec.rest : null) : e.rest;
+      blocks.push(logBlock(e, i, label, restAfter, sec.group ? 'in-group' : ''));
+    });
+  });
+
+  function logBlock(e, i, label, restAfter, extraClass) {
     const target = targetFor(e, ctx.maxes);
     const previous = previousSets(w, e, ctx.logs);
     const planKg = target && !target.missing ? target.kg : previous?.at(-1)?.weight_kg ?? '';
     const planReps = Number.isFinite(parseInt(e.reps, 10)) ? parseInt(e.reps, 10) : '';
-    const rest = parseRest(e.rest);
+    const rest = restAfter == null ? null : parseRest(restAfter);
     const logged = existing.filter((l) => l.exercise_index === i).sort((a, b) => a.set_number - b.set_number);
     const rows = draft?.rows?.[i]
       || (logged.length
         ? logged.map((l) => ({ weight: l.weight_kg ?? '', reps: l.reps ?? '', rpe: l.rpe ?? '', done: true }))
         : Array.from({ length: Math.min(Math.max(parseInt(e.sets, 10) || 1, 1), 10) }, () => ({ weight: '', reps: '', rpe: '', done: false })));
     const barbell = isBarbell(e);
+    // Holds and stretches ("30 sec") with no weight set: no kg box.
+    const timed = isTimed(e) && !e.load && !(Number(e.pct) > 0);
 
-    const setsEl = h('div', { class: 'set-rows' + (barbell ? ' with-bar' : '') });
+    const setsEl = h('div', { class: 'set-rows' + (barbell ? ' with-bar' : '') + (timed ? ' no-kg' : '') });
     // A set counts as done once it has reps: no tick needed. Entering the
     // reps for a set the first time also starts the rest timer.
     const hasReps = (r) => r.reps !== '' && r.reps != null;
-    const num = (r, key, placeholder, stepSize, label) => h('input', {
-      type: 'number', inputmode: 'decimal', min: '0', step: stepSize, value: r[key] ?? '', placeholder: String(placeholder), 'aria-label': label,
+    const isDone = () => rows.length > 0 && rows.every(hasReps);
+    const num = (r, key, placeholder, stepSize, aria) => h('input', {
+      type: 'number', inputmode: 'decimal', min: '0', step: stepSize, value: r[key] ?? '', placeholder: String(placeholder), 'aria-label': aria,
       oninput: (ev) => {
         r[key] = ev.target.value;
         ev.target.closest('.set-row')?.classList.toggle('done', hasReps(r));
+        markDone();
         persist();
       },
       onchange: () => {
         if (key !== 'reps' || !hasReps(r) || r.done) return;
         r.done = true;
         persist();
-        timer.start(rest || undefined);
+        if (restAfter != null) timer.start(rest || undefined);
       },
     });
     const draw = () => fill(setsEl,
       h('div', { class: 'set-row set-head', 'aria-hidden': 'true' },
-        h('span', {}, 'Set'), h('span', {}, 'kg'), h('span', {}, 'Reps'), barbell ? h('span', {}, 'Plates') : null),
+        h('span', {}, extraClass ? 'Round' : 'Set'), timed ? null : h('span', {}, 'kg'), h('span', {}, timed ? 'Seconds' : 'Reps'), barbell ? h('span', {}, 'Plates') : null),
       ...rows.map((r, j) => h('div', { class: 'set-row' + (hasReps(r) ? ' done' : '') },
         h('span', { class: 'set-num' }, String(j + 1)),
-        num(r, 'weight', planKg, '0.5', `${e.name} set ${j + 1} weight in kg`),
-        num(r, 'reps', planReps, '1', `${e.name} set ${j + 1} reps`),
+        timed ? null : num(r, 'weight', planKg, '0.5', `${e.name} set ${j + 1} weight in kg`),
+        num(r, 'reps', planReps, '1', `${e.name} set ${j + 1} ${timed ? 'seconds' : 'reps'}`),
         // Barbell lifts: tap the bar to see how to load this set's weight.
         barbell ? h('button', {
           type: 'button',
@@ -2868,30 +2932,39 @@ async function renderWorkoutPage() {
 
     // One short line: sets, reps, their weight, rest.
     const plan = [
-      e.sets && `${e.sets} sets`,
+      extraClass ? null : e.sets && `${e.sets} sets`,
       e.reps && repsText(e.reps),
       target && !target.missing ? `${kg(target.kg)} (${target.pct}% of ${target.rm}RM)` : Number(e.pct) > 0 ? `${e.pct}% of ${parseInt(e.rm, 10) || 1}RM` : null,
       e.load,
-      e.rest && `rest ${e.rest}`,
+      extraClass ? null : e.rest && `rest ${e.rest}`,
     ].filter(Boolean).join(' · ');
-    const el = h('section', { class: 'card log-ex' },
-      h('p', { class: 'eyebrow' }, String(i + 1).padStart(2, '0')),
-      h('h2', {}, h('button', {
-        type: 'button',
-        class: 'ex-title',
-        'aria-label': `${e.name}: see your history for this lift`,
-        onclick: () => openLiftHistory(e, ctx),
-      }, e.name, h('span', { class: 'ex-title-more', 'aria-hidden': 'true' }, 'History ›'))),
+    const tick = h('span', { class: 'ex-done', 'aria-hidden': 'true' }, '✓');
+    const el = h('section', { class: `log-ex ${extraClass || 'card'}`.trim() },
+      h('div', { class: 'ex-head' },
+        h('span', { class: 'ex-label', 'aria-hidden': 'true' }, label),
+        h('h2', {}, h('button', {
+          type: 'button',
+          class: 'ex-title',
+          'aria-label': `${e.name}: see your history for this lift`,
+          onclick: () => openLiftHistory(e, ctx),
+        }, e.name)),
+        tick),
       plan ? h('p', { class: 'ex-meta' }, plan) : null,
       target?.missing ? h('p', { class: 'ex-target' }, targetText(target, null)) : null,
       e.notes ? h('p', { class: 'ex-notes' }, e.notes) : null,
       setsEl,
-      h('div', { class: 'actions ex-actions' },
-        h('button', { type: 'button', class: 'btn small', onclick: () => { rows.push({ weight: rows.at(-1)?.weight ?? '', reps: '', done: false }); persist(); draw(); } }, '+ Add set'),
-        rows.length ? h('button', { type: 'button', class: 'btn ghost small', onclick: () => { if (rows.length) { rows.pop(); persist(); draw(); } } }, '− Remove set') : null),
+      h('div', { class: 'ex-actions' },
+        h('button', { type: 'button', class: 'link-btn', onclick: () => { rows.push({ weight: rows.at(-1)?.weight ?? '', reps: '', done: false }); persist(); draw(); markDone(); } }, extraClass ? '+ Add round' : '+ Add set'),
+        h('button', { type: 'button', class: 'link-btn', onclick: () => openLiftHistory(e, ctx) }, 'History')),
       howTo(e));
-    return { e, i, rows, el };
-  });
+    function markDone() {
+      el.classList.toggle('is-done', isDone());
+      if (blocks.length) showProgress();
+    }
+    markDone();
+    return { e, i, rows, el, isDone };
+  }
+  showProgress();
 
   const comment = ctx.feedback ? h('textarea', {
     rows: '3', maxlength: '4000', value: draft?.comment ?? fb?.comment ?? '',
@@ -2941,17 +3014,30 @@ async function renderWorkoutPage() {
     else leave();
   }
 
+  // Supersets are one card: "Superset B · 3 rounds", then each exercise.
+  const sectionEls = sections.map((sec) => {
+    const els = sec.items.map(({ i }) => blocks.find((b) => b.i === i).el);
+    if (!sec.group) return els[0];
+    const restText = sec.rest ? `, then rest ${restLabel(sec.rest)}` : '';
+    return h('section', { class: 'card log-group' },
+      h('p', { class: 'eyebrow' }, ['Superset', sec.rounds ? plural(Number(sec.rounds) || sec.rounds, 'round') : null].filter(Boolean).join(' · ')),
+      h('p', { class: 'muted small group-how' }, `Do these back to back${restText}.`),
+      els);
+  });
+
   mount(header(), h('main', { class: 'client-main workout-page' },
-    timer.el,
-    h('button', { class: 'btn ghost small back-link', onclick: leave }, '← Back'),
+    h('div', { class: 'row-between wp-top' },
+      h('button', { class: 'btn ghost small back-link', onclick: leave }, '← Back'),
+      h('button', { class: 'btn ghost small', onclick: () => timer.start() }, 'Rest timer')),
     h('p', { class: 'eyebrow' }, [w.workout_date ? formatDate(w.workout_date) : 'Any day', w.program_week ? `Week ${w.program_week}` : null].filter(Boolean).join(' · ')),
     h('h1', {}, w.title),
     w.notes ? h('p', { class: 'lead' }, w.notes) : null,
-    h('p', { class: 'muted small' }, 'Enter the weight and reps for each set as you go. Entering the reps starts your rest timer. Grey numbers are the plan.'),
-    exercises.length ? h('div', { class: 'stack' }, blocks.map((b) => b.el)) : h('p', { class: 'muted' }, 'This workout has no exercises listed.'),
+    exercises.length ? progress : null,
+    exercises.length ? h('div', { class: 'stack wp-list' }, sectionEls) : h('p', { class: 'muted' }, 'This workout has no exercises listed.'),
     effortCard,
     comment ? h('section', { class: 'card' }, field(`Comments for ${TRAINER_NAME} (optional)`, comment)) : null,
-    h('div', { class: 'row-end actions workout-finish' }, saveBtn, finishBtn)));
+    h('div', { class: 'row-end actions workout-finish' }, saveBtn, finishBtn),
+    timer.el));
 }
 
 // ---------------------------------------------------------------------------
