@@ -2547,6 +2547,18 @@ function isBarbell(e) {
   return typeof lib?.is_barbell === 'boolean' ? lib.is_barbell : guessBarbell(e.name);
 }
 
+// Exercises with no weight to log (bands, bodyweight, stretches, foam
+// rolling) get no kg box. The library's setting wins; without one, the
+// name is used as a guide. A load or % in the workout always means weight.
+const NO_WEIGHT_HINT = /\bband(ed|s)?\b|superband|mini ?band|clam ?shell|pass ?through|pull ?apart|plank|push ?up|chin ?up|crunch|stretch|foam roll|inchworm|airplane|bodyweight|\bbw\b|mobility|bird ?dog|dead ?bug|mountain climber|jumping jack|burpee|glute bridge/i;
+const WEIGHT_HINT = /barbell|dumbbell|\bdb\b|kettlebell|\bkb\b|cable|machine|smith|weighted|plate|goblet|landmine|trap bar/i;
+const guessUsesWeight = (name) => !(NO_WEIGHT_HINT.test(name || '') && !WEIGHT_HINT.test(name || ''));
+function usesWeight(e) {
+  if (String(e.load || '').trim() || Number(e.pct) > 0) return true;
+  const lib = 'uses_weight' in e ? e : findLib(e);
+  return typeof lib?.uses_weight === 'boolean' ? lib.uses_weight : guessUsesWeight(e.name);
+}
+
 // "90s", "2 min", "1:30", "2-3 min" -> seconds (the lower end of a range).
 function parseRest(text) {
   const t = String(text || '').toLowerCase().replace(/(\d+(?:\.\d+)?)\s*(?:-|–|to)\s*\d+(?:\.\d+)?/g, '$1').trim();
@@ -2885,10 +2897,12 @@ async function renderWorkoutPage() {
         ? logged.map((l) => ({ weight: l.weight_kg ?? '', reps: l.reps ?? '', rpe: l.rpe ?? '', done: true }))
         : Array.from({ length: Math.min(Math.max(parseInt(e.sets, 10) || 1, 1), 10) }, () => ({ weight: '', reps: '', rpe: '', done: false })));
     const barbell = isBarbell(e);
-    // Holds and stretches ("30 sec") with no weight set: no kg box.
+    // Holds and stretches ("30 sec") count seconds; band and bodyweight
+    // exercises have no kg box.
     const timed = isTimed(e) && !e.load && !(Number(e.pct) > 0);
+    const noKg = timed || !usesWeight(e);
 
-    const setsEl = h('div', { class: 'set-rows' + (barbell ? ' with-bar' : '') + (timed ? ' no-kg' : '') });
+    const setsEl = h('div', { class: 'set-rows' + (barbell ? ' with-bar' : '') + (noKg ? ' no-kg' : '') });
     // A set counts as done once it has reps: no tick needed. Entering the
     // reps for a set the first time also starts the rest timer.
     const hasReps = (r) => r.reps !== '' && r.reps != null;
@@ -2910,10 +2924,10 @@ async function renderWorkoutPage() {
     });
     const draw = () => fill(setsEl,
       h('div', { class: 'set-row set-head', 'aria-hidden': 'true' },
-        h('span', {}, extraClass ? 'Round' : 'Set'), timed ? null : h('span', {}, 'kg'), h('span', {}, timed ? 'Seconds' : 'Reps'), barbell ? h('span', {}, 'Plates') : null),
+        h('span', {}, extraClass ? 'Round' : 'Set'), noKg ? null : h('span', {}, 'kg'), h('span', {}, timed ? 'Seconds' : 'Reps'), barbell ? h('span', {}, 'Plates') : null),
       ...rows.map((r, j) => h('div', { class: 'set-row' + (hasReps(r) ? ' done' : '') },
         h('span', { class: 'set-num' }, String(j + 1)),
-        timed ? null : num(r, 'weight', planKg, '0.5', `${e.name} set ${j + 1} weight in kg`),
+        noKg ? null : num(r, 'weight', planKg, '0.5', `${e.name} set ${j + 1} weight in kg`),
         num(r, 'reps', planReps, '1', `${e.name} set ${j + 1} ${timed ? 'seconds' : 'reps'}`),
         // Barbell lifts: tap the bar to see how to load this set's weight.
         barbell ? h('button', {
@@ -4148,6 +4162,10 @@ function openExerciseDialog(x) {
   // Until the user changes it, a new exercise's tick follows its name.
   let barbellTouched = !!x;
   barbell.addEventListener('change', () => { barbellTouched = true; });
+  const weighted = h('input', { type: 'checkbox', checked: (x ? usesWeight({ ...x, load: '', pct: '' }) : true) || null });
+  let weightedTouched = !!x;
+  weighted.addEventListener('change', () => { weightedTouched = true; });
+  name.addEventListener('input', () => { if (!weightedTouched) weighted.checked = guessUsesWeight(name.value); });
   name.addEventListener('input', () => { if (!barbellTouched) barbell.checked = guessBarbell(name.value); });
   let dlg;
   const extra = x ? h('button', {
@@ -4170,6 +4188,7 @@ function openExerciseDialog(x) {
       field('Name', name),
       field('Demo video link (optional)', video, 'A YouTube, Instagram or other video link. Clients open it in a new tab.'),
       field('Coaching cues (optional)', cues),
+      h('label', { class: 'check pin-option' }, weighted, h('span', {}, 'Uses weight (untick for bands, bodyweight and stretches: clients get no kg box)')),
       h('label', { class: 'check pin-option' }, barbell, h('span', {}, 'Uses a barbell (clients see which plates to load)')),
     ],
     extra,
@@ -4179,6 +4198,7 @@ function openExerciseDialog(x) {
       const row = { name: name.value.trim(), video_url: url, cues: cues.value.trim() };
       // Only send is_barbell once the database has that column.
       if (state.library.some((e) => 'is_barbell' in e)) row.is_barbell = barbell.checked;
+      if (state.library.some((e) => 'uses_weight' in e)) row.uses_weight = weighted.checked;
       const { error } = x
         ? await sb.from('exercises').update(row).eq('id', x.id)
         : await sb.from('exercises').insert(row);
