@@ -65,8 +65,12 @@ Welcome to EmPT: your sign-in code {{ .Token }}
 
 - **Authentication → Providers → Email:** "Email OTP length" should be **6** (the
   app accepts 6 to 10 digits, but the emails above read best with 6).
-- **Authentication → Emails → SMTP Settings:** connect an email service (for
-  example Resend) so you aren't limited to a few emails an hour.
+- **Authentication → Emails → SMTP Settings:** connect an email service so you
+  aren't limited to a few emails an hour (and so these templates can be used:
+  Supabase only allows custom templates with your own SMTP). EmPT sends
+  through Gmail: host `smtp.gmail.com`, port `465`, username the full Gmail
+  address, password a Google **app password** typed without spaces. Then set
+  **Rate limits → emails per hour** to about 30.
 - **Authentication → URL Configuration:** Site URL
   `https://app.emilycairns.com.au/` and redirect URL
   `https://app.emilycairns.com.au/**`.

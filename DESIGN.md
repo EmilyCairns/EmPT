@@ -30,7 +30,7 @@ EmPT should read like a premium editorial wellness journal printed on warm cream
 - **App name:** EmPT. It's set in `config.js` (`APP_NAME`) and `manifest.webmanifest`. The wordmark is set in the serif, in Ink, next to the terracotta seal icon.
 - **Personality:** calm, warm, editorial, unhurried. It's health and fitness that trusts the reader to slow down, never a shouty gym.
 - **Accent:** Terracotta Seal `#b05a36`. It's the **only** accent colour.
-- **Logo / icon:** `icon.svg`, an outlined dumbbell in parchment on a terracotta-to-tan gradient seal.
+- **Logo / icon:** `icon.svg`, a **Perth sunrise over a barbell**: a terracotta half sun with five short rays rising behind an Ink barbell (the horizon). Training first thing in the morning, in the sun. The phone icons in `icons/` put the same picture on Aged Paper.
 - **Theme:** **light only.** The parchment warmth *is* the brand, so there is deliberately no dark mode.
 
 ## 2. Voice and wording
@@ -229,7 +229,8 @@ New components must reuse existing tokens. If a new one is genuinely needed, add
 
 These files can't read `design-tokens.css`. Update them by hand if the palette changes:
 
-- `icon.svg`: the gradient stops (`#b05a36` → `#d4a68e`) and the stroke colour (`#fef9ef`).
+- `icon.svg`: the sun and rays (`#b05a36`, Terracotta Seal) and the barbell (`#2a2b2f`, Ink).
+- `icons/*.png`: the phone home-screen icons, the same sunrise on Aged Paper (`#f5eee1`). Remake them from `icon.svg` if it changes.
 - `index.html`: `<meta name="theme-color" content="#fef9ef">`, which colours the browser bar on phones.
 - `manifest.webmanifest`: `theme_color` and `background_color` (both Parchment).
 

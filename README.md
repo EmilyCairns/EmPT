@@ -17,7 +17,7 @@ The pages are hosted free on **GitHub Pages**. Logins, workouts and messages are
 | `config.js` | Your Supabase details and display names. **The only file you need to edit for setup.** |
 | `supabase/schema.sql` | Sets up the database. Paste it into Supabase once. |
 | `manifest.webmanifest`, `icon.svg`, `icons/` | Lets clients "Add to Home Screen" on their phone (with a proper app icon) |
-| `privacy.html` | The privacy page clients can read. Fill in your business name and email. |
+| `privacy.html` | The privacy page clients can read (your name and contact email are filled in). |
 | `supabase/email-templates.md` | Sign-in emails to paste into Supabase (they include the 6-digit code) |
 | `docs/welcome-message.md` | A message to send new clients |
 
@@ -67,7 +67,7 @@ Clients sign in with a **6-digit code** (or a link) emailed to them. Two things 
 
 ### 6. Finish the privacy page
 
-Open `privacy.html` and replace **[your business name]** and **[your contact email]**. It's linked from the sign-in screen, the health form and the bottom of every client's Home page. It's a plain-English starting point, not legal advice: check it with your insurer or professional association.
+Done: `privacy.html` has your name (Emily Cairns) and contact email. Update it there if either changes. It's linked from the sign-in screen, the health form and the bottom of every client's Home page. It's a plain-English starting point, not legal advice: check it with your insurer or professional association.
 
 ### 7. Test it, then invite clients
 
