@@ -1384,6 +1384,7 @@ function openWorkoutEditor(client, workout, onSaved, opts = {}) {
       const mini = (label, control) => h('label', { class: 'mini-field' }, h('span', { 'aria-hidden': 'true' }, label), control);
       const groupSelect = h('select', { 'aria-label': 'Superset', onchange: (e) => { r.group = e.target.value; } },
         h('option', { value: '' }, 'No'),
+        h('option', { value: WARMUP, selected: String(r.group || '').toUpperCase() === WARMUP }, 'Warm up'),
         GROUP_CHOICES.map((g) => h('option', { value: g, selected: String(r.group || '').toUpperCase() === g }, `Superset ${g}`)));
       const rmSelect = h('select', { 'aria-label': 'Percentage of which rep max', onchange: (e) => { r.rm = e.target.value; } },
         RM_CHOICES.map((n) => h('option', { value: String(n), selected: String(r.rm || '1') === String(n) }, `of ${n}RM`)));
@@ -1402,7 +1403,7 @@ function openWorkoutEditor(client, workout, onSaved, opts = {}) {
           state.lifting ? mini('Of', rmSelect) : null,
           mini('Load', input('load', 'Load (e.g. 20 kg)')),
           mini('Rest', input('rest', 'Rest (e.g. 90s)')),
-          mini('Superset', groupSelect)),
+          mini('Superset / warm up', groupSelect)),
         input('notes', 'Coaching notes (optional)'));
     }));
   }
@@ -1420,7 +1421,7 @@ function openWorkoutEditor(client, workout, onSaved, opts = {}) {
       logNow ? null : field('Notes', notes),
       libraryDatalist(),
       h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Exercises'),
-        logNow ? null : h('span', { class: 'muted small' }, 'Pick from your library or type a new name (new names are added to the library). For a percentage, fill in "% of max" and choose which rep max; the client sees the weight worked out for them. For a superset, give exercises next to each other the same letter: the sets on the first are the rounds, and the rest on the last is the rest after each round.'),
+        logNow ? null : h('span', { class: 'muted small' }, 'Pick from your library or type a new name (new names are added to the library). For a percentage, fill in "% of max" and choose which rep max; the client sees the weight worked out for them. For a superset, give exercises next to each other the same letter: the sets on the first are the rounds, and the rest on the last is the rest after each round. Choose "Warm up" for warm-up exercises: clients see them as one list with a single tick, with nothing to log.'),
         exList,
         h('button', { type: 'button', class: 'btn', onclick: () => { rows.push(blankExercise()); drawRows(); exList.lastChild?.querySelector('input')?.focus(); } }, '+ Add exercise')),
     ],
@@ -2273,19 +2274,29 @@ function exerciseSections(exercises) {
     else out.push({ group: g || null, items: [{ e, i }] });
   });
   for (const sec of out) {
-    if (sec.group && sec.items.length < 2) sec.group = null; // a superset of one is just an exercise
+    sec.warmup = sec.group === WARMUP;
+    if (sec.group && !sec.warmup && sec.items.length < 2) sec.group = null; // a superset of one is just an exercise
     sec.rounds = sec.items[0].e.sets || '';
     sec.rest = sec.items.at(-1).e.rest || '';
   }
   return out;
 }
 const hasGroups = (exercises) => exerciseSections(exercises).some((sec) => sec.group);
-// "A1", "A2", "B"… for every exercise, in order.
+// "A1", "A2", "B"… for every exercise, in order. Warm-up exercises are
+// "W1", "W2" and don't use up a letter.
 function exerciseLabels(exercises) {
   const labels = [];
-  exerciseSections(exercises).forEach((sec, k) => sec.items.forEach((x, m) => { labels[x.i] = sec.group ? `${letter(k)}${m + 1}` : letter(k); }));
+  let k = 0;
+  for (const sec of exerciseSections(exercises)) {
+    if (sec.warmup) { sec.items.forEach((x, m) => { labels[x.i] = `W${m + 1}`; }); continue; }
+    sec.items.forEach((x, m) => { labels[x.i] = sec.group ? `${letter(k)}${m + 1}` : letter(k); });
+    k += 1;
+  }
   return labels;
 }
+// Warm-ups: exercises marked with group "W" are listed with a single
+// "done" tick on the workout page instead of boxes for every set.
+const WARMUP = 'W';
 // "30 sec", "45-60 sec", "1 min", "40s": a hold or stretch timed in seconds.
 const isTimed = (e) => /\d\s*(s|sec|secs|seconds?)\b|\bmin(s|utes?)?\b/i.test(String(e.reps || ''));
 // "60s" → "60 sec" for sentences.
@@ -2857,7 +2868,7 @@ async function renderWorkoutPage() {
   const draftKey = `workout-draft:${w.id}`;
   const draft = remember(draftKey);
   if (draft) toast('Picked up where you left off on this device.');
-  const persist = () => remember(draftKey, { rows: blocks.map((b) => b.rows), comment: comment?.value ?? '', effort });
+  const persist = () => remember(draftKey, { rows: Object.fromEntries(blocks.map((b) => [b.i, b.rows])), comment: comment?.value ?? '', effort, warmupDone });
   // How hard the whole workout felt, 1–10 (asked once at the end, not per set).
   let effort = draft?.effort ?? fb?.effort ?? null;
 
@@ -2867,23 +2878,41 @@ async function renderWorkoutPage() {
   const progress = h('div', { class: 'wp-progress', role: 'status', 'aria-live': 'polite' },
     progressText, h('span', { class: 'wp-progress-bar', 'aria-hidden': 'true' }, progressFill));
   const showProgress = () => {
-    const n = blocks.filter((b) => b.isDone()).length;
-    progressText.textContent = `${n} of ${blocks.length} exercise${blocks.length === 1 ? '' : 's'} done`;
-    progressFill.style.width = `${blocks.length ? Math.round((n / blocks.length) * 100) : 0}%`;
+    const hasWarmup = !!warmupCard;
+    const total = blocks.length + (hasWarmup ? 1 : 0);
+    const n = blocks.filter((b) => b.isDone()).length + (hasWarmup && warmupDone ? 1 : 0);
+    progressText.textContent = hasWarmup ? `${n} of ${total} done` : `${n} of ${total} exercise${total === 1 ? '' : 's'} done`;
+    progressFill.style.width = `${total ? Math.round((n / total) * 100) : 0}%`;
   };
 
+  let warmupCard = null;
+  let warmupDone = false;
   const sections = exerciseSections(exercises);
-  const anyGroups = sections.some((sec) => sec.group);
+  const anyGroups = sections.some((sec) => sec.group && !sec.warmup);
+  const labels = exerciseLabels(exercises);
   const blocks = [];
-  sections.forEach((sec, k) => {
+  let plainNo = 0;
+  for (const sec of sections) {
+    if (sec.warmup) continue;
     sec.items.forEach(({ e, i }, m) => {
       // Letters when there are supersets (A, B1, B2, C); plain numbers otherwise.
-      const label = !anyGroups ? String(i + 1) : sec.group ? `${letter(k)}${m + 1}` : letter(k);
+      const label = anyGroups ? labels[i] : String(++plainNo);
       // In a superset only the last exercise rests; the others go straight on.
       const restAfter = sec.group ? (m === sec.items.length - 1 ? sec.rest : null) : e.rest;
       blocks.push(logBlock(e, i, label, restAfter, sec.group ? 'in-group' : ''));
     });
-  });
+  }
+  // The warm-up: one list and one tick (kept on this device with the draft).
+  const warmups = sections.filter((sec) => sec.warmup);
+  warmupDone = !!(draft?.warmupDone ?? (done || existing.length > 0));
+  const warmupTick = h('input', { type: 'checkbox', checked: warmupDone || null, onchange: (ev) => { warmupDone = ev.target.checked; warmupCard?.classList.toggle('is-done', warmupDone); persist(); showProgress(); } });
+  warmupCard = warmups.length ? h('section', { class: 'card log-warmup' + (warmupDone ? ' is-done' : '') },
+    h('p', { class: 'eyebrow' }, 'Warm up'),
+    h('ul', { class: 'warmup-list' }, warmups.flatMap((sec) => sec.items).map(({ e }) => h('li', {},
+      h('b', {}, e.name),
+      h('span', { class: 'ex-meta' }, [e.sets && Number(e.sets) > 1 ? `${e.sets} ×` : null, e.reps ? repsText(e.reps) : null].filter(Boolean).join(' ')),
+      e.notes ? h('span', { class: 'ex-notes' }, e.notes) : null))),
+    h('label', { class: 'check warmup-tick' }, warmupTick, h('span', {}, 'Warm up done'))) : null;
 
   function logBlock(e, i, label, restAfter, extraClass) {
     const target = targetFor(e, ctx.maxes);
@@ -3029,7 +3058,9 @@ async function renderWorkoutPage() {
   }
 
   // Supersets are one card: "Superset B · 3 rounds", then each exercise.
+  let warmupShown = false;
   const sectionEls = sections.map((sec) => {
+    if (sec.warmup) { if (warmupShown) return null; warmupShown = true; return warmupCard; }
     const els = sec.items.map(({ i }) => blocks.find((b) => b.i === i).el);
     if (!sec.group) return els[0];
     const restText = sec.rest ? `, then rest ${restLabel(sec.rest)}` : '';
