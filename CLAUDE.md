@@ -10,3 +10,4 @@
 - Sessions (`sessions` table) are booked by the trainer. Never cancel or delete a session unless the trainer asks; cancel through `cancel_session()` so the client is sent a message.
 - Rest weeks (`excused_weeks`: `client_id`, `week_start` = a Monday) pause a client's streak. Only add or remove them when the trainer asks.
 - Any database change made directly in Supabase must also be added to `supabase/schema.sql`, so the file always matches the live database.
+- `index.html` loads `app.js`, `styles.css` and `design-tokens.css` with `?v=YYYYMMDD` so phones fetch the new files after a release (GitHub Pages lets browsers keep old copies for 10 minutes, home-screen apps sometimes longer). Bump the date (add a letter for a second release that day) whenever any of them changes.
