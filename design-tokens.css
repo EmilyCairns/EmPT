@@ -44,6 +44,7 @@
   --color-accent-text: var(--color-terracotta-text); /* Eyebrow labels, outlined buttons, exercise numbers */
   --color-on-accent: var(--color-parchment);       /* Text on a terracotta fill */
   --color-focus-ring: rgb(176 90 54 / 0.2);        /* Soft glow around focused inputs */
+  --color-accent-wash: rgb(176 90 54 / 0.12);      /* Terracotta tint behind small labels (exercise A1, B…) */
   --color-focus: var(--color-terracotta-seal);     /* Keyboard focus outline on buttons */
 
   --color-danger: var(--color-brick);

@@ -2906,8 +2906,8 @@ async function renderWorkoutPage() {
   const warmups = sections.filter((sec) => sec.warmup);
   warmupDone = !!(draft?.warmupDone ?? (done || existing.length > 0));
   const warmupTick = h('input', { type: 'checkbox', checked: warmupDone || null, onchange: (ev) => { warmupDone = ev.target.checked; warmupCard?.classList.toggle('is-done', warmupDone); persist(); showProgress(); } });
-  warmupCard = warmups.length ? h('section', { class: 'card log-warmup' + (warmupDone ? ' is-done' : '') },
-    h('p', { class: 'eyebrow' }, 'Warm up'),
+  warmupCard = warmups.length ? h('section', { class: 'log-warmup' + (warmupDone ? ' is-done' : '') },
+    h('p', { class: 'group-head' }, 'Warm up'),
     h('ul', { class: 'warmup-list' }, warmups.flatMap((sec) => sec.items).map(({ e }) => h('li', {},
       h('b', {}, e.name),
       h('span', { class: 'ex-meta' }, [e.sets && Number(e.sets) > 1 ? `${e.sets} ×` : null, e.reps ? repsText(e.reps) : null].filter(Boolean).join(' ')),
@@ -2951,11 +2951,15 @@ async function renderWorkoutPage() {
         if (restAfter != null) timer.start(rest || undefined);
       },
     });
+    // A small table, like ROCC's: # · Last time · kg · reps (· plates).
+    const lastText = (l) => (l ? [l.weight_kg != null ? `${Number(l.weight_kg)}` : null, l.reps != null ? `${l.reps}` : null].filter(Boolean).join(noKg ? '' : '×') || '–' : '–');
     const draw = () => fill(setsEl,
       h('div', { class: 'set-row set-head', 'aria-hidden': 'true' },
-        h('span', {}, extraClass ? 'Round' : 'Set'), noKg ? null : h('span', {}, 'kg'), h('span', {}, timed ? 'Seconds' : 'Reps'), barbell ? h('span', {}, 'Plates') : null),
+        h('span', {}, '#'), h('span', { class: 'set-last' }, 'Last'), noKg ? null : h('span', {}, 'kg'), h('span', {}, timed ? 'Secs' : 'Reps'), barbell ? h('span') : null),
       ...rows.map((r, j) => h('div', { class: 'set-row' + (hasReps(r) ? ' done' : '') },
         h('span', { class: 'set-num' }, String(j + 1)),
+        // What they did on this set last time.
+        h('span', { class: 'set-last', title: previous?.[j] ? `Last time: ${prevSetText(previous[j], false)}` : 'Not done before' }, lastText(previous?.[j])),
         noKg ? null : num(r, 'weight', planKg, '0.5', `${e.name} set ${j + 1} weight in kg`),
         num(r, 'reps', planReps, '1', `${e.name} set ${j + 1} ${timed ? 'seconds' : 'reps'}`),
         // Barbell lifts: tap the bar to see how to load this set's weight.
@@ -2965,43 +2969,43 @@ async function renderWorkoutPage() {
           'aria-label': `How to load the bar for set ${j + 1}`,
           title: 'How to load the bar',
           onclick: () => openBarSetup(e, r.weight !== '' && r.weight != null ? r.weight : planKg),
-        }, barbellIcon()) : null,
-        // What they did on this set last time, right under where they fill it in.
-        previous?.[j] ? h('p', { class: 'set-prev' }, `Last time: ${prevSetText(previous[j], false)}`) : null)),
-      previous && previous.length > rows.length
-        ? h('p', { class: 'set-prev more' }, `Last time you also did: ${previous.slice(rows.length).map((l) => prevSetText(l, false)).join(' · ')}`)
-        : null);
+        }, barbellIcon()) : null)));
     draw();
 
-    // One short line: sets, reps, their weight, rest.
-    const plan = [
-      extraClass ? null : e.sets && `${e.sets} sets`,
-      e.reps && repsText(e.reps),
-      target && !target.missing ? `${kg(target.kg)} (${target.pct}% of ${target.rm}RM)` : Number(e.pct) > 0 ? `${e.pct}% of ${parseInt(e.rm, 10) || 1}RM` : null,
-      e.load,
-      extraClass ? null : e.rest && `rest ${e.rest}`,
-    ].filter(Boolean).join(' · ');
-    const tick = h('span', { class: 'ex-done', 'aria-hidden': 'true' }, '✓');
-    const el = h('section', { class: `log-ex ${extraClass || 'card'}`.trim() },
-      h('div', { class: 'ex-head' },
-        h('span', { class: 'ex-label', 'aria-hidden': 'true' }, label),
-        h('h2', {}, h('button', {
-          type: 'button',
-          class: 'ex-title',
-          'aria-label': `${e.name}: see your history for this lift`,
-          onclick: () => openLiftHistory(e, ctx),
-        }, e.name)),
-        tick),
-      plan ? h('p', { class: 'ex-meta' }, plan) : null,
+    // The prescription in one short line: "4 × 6-8 · 65 kg · rest 60s".
+    const sets = extraClass ? '' : String(e.sets || '').trim();
+    const what = e.reps ? (sets ? `${sets} × ${e.reps}` : repsText(e.reps)) : sets ? plural(Number(sets) || sets, 'set') : '';
+    const weight = target && !target.missing ? `${kg(target.kg)} (${target.pct}% of ${target.rm}RM)` : Number(e.pct) > 0 ? `${e.pct}% of ${parseInt(e.rm, 10) || 1}RM` : e.load;
+    const status = h('span', { class: 'ex-status' });
+    const lib = findLib(e);
+    const hasInfo = !!(lib?.cues || safeUrl(lib?.video_url));
+    const info = hasInfo ? howTo(e) : null;
+    if (info) info.classList.add('ex-info');
+    const infoBtn = info ? h('button', {
+      type: 'button', class: 'mini-btn', 'aria-expanded': 'false',
+      onclick: () => { info.open = !info.open; infoBtn.setAttribute('aria-expanded', String(info.open)); infoBtn.classList.toggle('on', info.open); },
+    }, 'Info') : null;
+    const el = h('section', { class: `log-ex ${extraClass}`.trim() },
+      h('div', { class: 'ex-top' },
+        h('span', { class: 'ex-slot', 'aria-hidden': 'true' }, label),
+        h('h2', {}, h('button', { type: 'button', class: 'ex-name', 'aria-label': `${e.name}: see your history for this lift`, onclick: () => openLiftHistory(e, ctx) }, e.name)),
+        infoBtn,
+        status),
+      what || weight || (!extraClass && e.rest) ? h('p', { class: 'ex-rx' },
+        what ? h('span', { class: 'ex-sr' }, what) : null,
+        weight ? h('span', { class: 'ex-kg' }, weight) : null,
+        !extraClass && e.rest ? h('span', { class: 'ex-rest' }, `rest ${e.rest}`) : null) : null,
       target?.missing ? h('p', { class: 'ex-target' }, targetText(target, null)) : null,
       e.notes ? h('p', { class: 'ex-notes' }, e.notes) : null,
+      info,
       setsEl,
       h('div', { class: 'ex-actions' },
-        h('button', { type: 'button', class: 'link-btn', onclick: () => { rows.push({ weight: rows.at(-1)?.weight ?? '', reps: '', done: false }); persist(); draw(); markDone(); } }, extraClass ? '+ Add round' : '+ Add set'),
-        h('button', { type: 'button', class: 'link-btn', onclick: () => openLiftHistory(e, ctx) }, 'History')),
-      howTo(e));
+        h('button', { type: 'button', class: 'add-set', onclick: () => { rows.push({ weight: rows.at(-1)?.weight ?? '', reps: '', done: false }); persist(); draw(); markDone(); } }, extraClass ? '+ Add round' : '+ Add set')));
     function markDone() {
+      const n = rows.filter(hasReps).length;
       el.classList.toggle('is-done', isDone());
+      status.textContent = isDone() ? '✓' : n ? `${n}/${rows.length}` : '';
+      status.setAttribute('aria-label', isDone() ? 'done' : `${n} of ${rows.length} done`);
       if (blocks.length) showProgress();
     }
     markDone();
@@ -3063,11 +3067,10 @@ async function renderWorkoutPage() {
     if (sec.warmup) { if (warmupShown) return null; warmupShown = true; return warmupCard; }
     const els = sec.items.map(({ i }) => blocks.find((b) => b.i === i).el);
     if (!sec.group) return els[0];
-    const restText = sec.rest ? `, then rest ${restLabel(sec.rest)}` : '';
-    return h('section', { class: 'card log-group' },
-      h('p', { class: 'eyebrow' }, ['Superset', sec.rounds ? plural(Number(sec.rounds) || sec.rounds, 'round') : null].filter(Boolean).join(' · ')),
-      h('p', { class: 'muted small group-how' }, `Do these back to back${restText}.`),
-      els);
+    return h('section', { class: 'log-group' },
+      h('p', { class: 'group-head' }, ['Superset', sec.rounds ? plural(Number(sec.rounds) || sec.rounds, 'round') : null].filter(Boolean).join(' · ')),
+      els,
+      h('p', { class: 'group-rest' }, sec.rest ? `Rest ${restLabel(sec.rest)} after each round` : 'Go straight into the next round'));
   });
 
   mount(header(), h('main', { class: 'client-main workout-page' },
@@ -3078,7 +3081,7 @@ async function renderWorkoutPage() {
     h('h1', {}, w.title),
     w.notes ? h('p', { class: 'lead' }, w.notes) : null,
     exercises.length ? progress : null,
-    exercises.length ? h('div', { class: 'stack wp-list' }, sectionEls) : h('p', { class: 'muted' }, 'This workout has no exercises listed.'),
+    exercises.length ? h('div', { class: 'card wp-list' }, sectionEls) : h('p', { class: 'muted' }, 'This workout has no exercises listed.'),
     effortCard,
     comment ? h('section', { class: 'card' }, field(`Comments for ${TRAINER_NAME} (optional)`, comment)) : null,
     h('div', { class: 'row-end actions workout-finish' }, saveBtn, finishBtn),

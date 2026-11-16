@@ -1521,7 +1521,7 @@ button.link:focus-visible { outline: var(--border-width-strong) solid var(--colo
 .privacy-page a, .login-foot a, .home-foot a, .health-page .muted a { color: var(--color-accent-text); font-weight: var(--weight-semibold); }
 .login-foot { margin-top: var(--space-6); text-align: center; }
 
-/* ---- Workout page: compact, grouped, one clear list ---------------------- */
+/* ---- Workout page: one clean list, like a printed program --------------- */
 .workout-page { padding-bottom: calc(var(--space-20) + var(--space-12)); }
 .wp-top { margin: 0 0 var(--space-4); }
 .wp-top .back-link { margin: 0; }
@@ -1529,33 +1529,56 @@ button.link:focus-visible { outline: var(--border-width-strong) solid var(--colo
 .wp-progress-text { white-space: nowrap; }
 .wp-progress-bar { flex: 1; height: var(--space-2); border-radius: var(--radius-pills); background: var(--color-surface-raised); overflow: hidden; }
 .wp-progress-fill { display: block; height: 100%; width: 0; border-radius: var(--radius-pills); background: var(--color-accent); transition: width var(--motion-fast); }
-.wp-list { gap: var(--space-3); }
-.workout-page .card.log-ex, .workout-page .log-group { padding: var(--space-5); border-top: 0; }
-.ex-head { display: grid; grid-template-columns: auto 1fr auto; align-items: start; gap: var(--space-3); }
-.ex-head .ex-label { padding-top: calc(var(--space-1) / 2); }
-.workout-page .log-ex h2 { margin: 0; font-size: inherit; line-height: inherit; }
-.ex-label { min-width: var(--space-6); color: var(--color-accent-text); font-size: var(--text-body-sm); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
-.ex-done { visibility: hidden; color: var(--color-accent-text); font-weight: var(--weight-bold); }
-.log-ex.is-done .ex-done { visibility: visible; }
-.workout-page .log-ex .ex-meta { margin: var(--space-1) 0 0; padding-left: calc(var(--space-6) + var(--space-3)); }
-.workout-page .log-ex .ex-notes { margin: var(--space-1) 0 0; padding-left: calc(var(--space-6) + var(--space-3)); color: var(--color-text-muted); }
-.workout-page .log-ex .ex-target { padding-left: calc(var(--space-6) + var(--space-3)); }
-.workout-page .set-rows { gap: var(--space-1); margin: var(--space-3) 0 var(--space-2); }
-.workout-page .set-row input { height: var(--control-height-sm); padding-block: 0; }
-/* No kg box: the reps box keeps a sensible width instead of filling the row. */
-.workout-page .set-rows.no-kg .set-row { grid-template-columns: var(--space-8) minmax(0, calc(var(--space-20) + var(--space-12))); }
-.workout-page .set-prev { margin: 0 0 var(--space-1); }
-.ex-actions { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-5); margin-top: var(--space-1); }
-.link-btn { padding: var(--space-1) 0; border: 0; background: none; color: var(--color-accent-text); font: inherit; font-size: var(--text-body-sm); font-weight: var(--weight-semibold); cursor: pointer; }
-.link-btn:hover { text-decoration: underline; }
-.link-btn:focus-visible { outline: var(--border-width-strong) solid var(--color-focus); outline-offset: var(--space-1); border-radius: var(--radius-nav); }
-.workout-page .log-ex .howto { margin-top: var(--space-2); }
-/* A superset: one card, its exercises split by hairlines. */
-.log-group .eyebrow { margin: 0; }
-.group-how { margin: var(--space-1) 0 0; }
-.log-ex.in-group { margin-top: var(--space-4); padding-top: var(--space-4); border-top: var(--border-width) solid var(--color-border); }
+/* The whole workout is one card; each part is split by a hairline. */
+.workout-page .card.wp-list { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+.wp-list > * + * { border-top: var(--border-width) solid var(--color-border); }
+/* One exercise, ROCC-style: a small label pill, the name, one line of what
+   to do, then a compact table (# · Last · kg · Reps). */
+.log-ex { padding: var(--space-4) var(--space-5); }
+.ex-top { display: flex; align-items: center; gap: var(--space-2); }
+.workout-page .log-ex h2 { flex: 1; min-width: 0; margin: 0; font: inherit; }
+.ex-slot { flex-shrink: 0; min-width: var(--space-6); padding: calc(var(--space-1) / 2) var(--space-2); border-radius: var(--radius-pills); background: var(--color-accent-wash); color: var(--color-accent-text); font-family: var(--font-mono); font-size: var(--text-mono); font-weight: var(--weight-semibold); text-align: center; }
+.ex-name { padding: 0; border: 0; background: none; color: var(--color-text); font: inherit; font-weight: var(--weight-semibold); line-height: var(--leading-subheading); text-align: left; cursor: pointer; }
+.ex-name:hover { text-decoration: underline; }
+.ex-name:focus-visible { outline: var(--border-width-strong) solid var(--color-focus); outline-offset: var(--space-1); border-radius: var(--radius-nav); }
+.mini-btn { flex-shrink: 0; padding: var(--space-1) var(--space-3); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-pills); background: var(--color-surface); color: var(--color-text); font: inherit; font-size: var(--text-body-sm); cursor: pointer; }
+.mini-btn.on { border-color: var(--color-accent); color: var(--color-accent-text); }
+.ex-status { flex-shrink: 0; min-width: var(--space-6); color: var(--color-accent-text); font-size: var(--text-body-sm); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; text-align: right; }
+.ex-rx { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-3); margin: var(--space-1) 0 0; font-size: var(--text-body-sm); }
+.ex-sr { font-family: var(--font-mono); color: var(--color-text); }
+.ex-kg { color: var(--color-accent-text); font-weight: var(--weight-semibold); }
+.ex-rest { color: var(--color-text-muted); }
+.workout-page .log-ex .ex-notes { margin: var(--space-1) 0 0; color: var(--color-text-muted); font-size: var(--text-body-sm); }
+.workout-page .log-ex .ex-target { margin: var(--space-1) 0 0; }
+.ex-info > summary { display: none; }
+.ex-info { margin-top: var(--space-2); padding: var(--space-3); border-radius: var(--radius-nav); background: var(--color-surface); font-size: var(--text-body-sm); }
+.ex-info p { margin: 0 0 var(--space-2); }
+/* The set table: small rows, numbers right where you type. */
+.workout-page .set-rows { gap: var(--space-1); margin: var(--space-3) 0 0; }
+.workout-page .set-row { grid-template-columns: var(--space-6) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-2); }
+.workout-page .set-rows.with-bar .set-row { grid-template-columns: var(--space-6) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) var(--control-height-sm); }
+.workout-page .set-rows.no-kg .set-row { grid-template-columns: var(--space-6) minmax(0, 1fr) minmax(0, 2fr); }
+.workout-page .set-rows.no-kg .set-row input { max-width: calc(var(--space-20) + var(--space-8)); }
+.workout-page .set-head { font-size: var(--text-eyebrow); }
+.workout-page .set-num { font-family: var(--font-mono); font-size: var(--text-mono); color: var(--color-text-muted); }
+.workout-page .set-row.done .set-num { color: var(--color-accent-text); }
+.set-last { overflow: hidden; color: var(--color-text-muted); font-family: var(--font-mono); font-size: var(--text-mono); text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+.workout-page .set-row input { height: var(--control-height-sm); padding-block: 0; border-radius: var(--radius-nav); }
+.workout-page .bar-btn { width: var(--control-height-sm); height: var(--control-height-sm); }
+.ex-actions { margin-top: var(--space-2); }
+.add-set { width: 100%; padding: var(--space-2); border: var(--border-width) dashed var(--color-border); border-radius: var(--radius-nav); background: none; color: var(--color-text-muted); font: inherit; font-size: var(--text-body-sm); cursor: pointer; }
+.add-set:hover { border-color: var(--color-accent); color: var(--color-accent-text); }
+/* Supersets and the warm-up: a terracotta bar down the left, a small
+   heading, and (supersets) the rest after each round at the bottom. */
+.log-group, .log-warmup { border-left: var(--space-1) solid var(--color-accent); }
+.group-head { margin: 0; padding: var(--space-3) var(--space-5) 0 calc(var(--space-5) - var(--space-1)); color: var(--color-accent-text); font-size: var(--text-eyebrow); font-weight: var(--weight-semibold); text-transform: uppercase; }
+.log-group .log-ex { padding-left: calc(var(--space-5) - var(--space-1)); }
+.log-group .log-ex + .log-ex { border-top: var(--border-width) dashed var(--color-border); }
+.group-rest { margin: 0; padding: 0 var(--space-5) var(--space-3) calc(var(--space-5) - var(--space-1)); color: var(--color-text-muted); font-size: var(--text-body-sm); }
 /* Warm-up: one card listing what to do, with a single tick. Nothing to log. */
-.log-warmup .eyebrow { margin: 0 0 var(--space-2); }
+.log-warmup { padding: 0 var(--space-5) var(--space-4) 0; }
+.log-warmup .warmup-list, .log-warmup .warmup-tick { padding-left: calc(var(--space-5) - var(--space-1)); }
+.log-warmup .warmup-list { margin-top: var(--space-2); }
 .warmup-list { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
 .warmup-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); }
 .warmup-list .ex-meta { display: inline; }
