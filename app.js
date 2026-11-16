@@ -1282,6 +1282,7 @@ async function renderTrainerWorkouts(body, c) {
   let programsReady = false;
   const toolbar = h('div', { class: 'row-between' }, h('h3', {}, 'Workouts'), h('span'));
   const drawToolbar = () => toolbar.lastChild.replaceWith(newMenu([
+    state.lifting ? ['Log a session now', () => openWorkoutEditor(c, null, refresh, { logNow: true })] : null,
     ['Workout', () => openWorkoutEditor(c, null, refresh)],
     programsReady ? ['Program (a block of weeks)', () => openProgramDialog(c, null, refresh)] : null,
   ]));
@@ -1362,8 +1363,9 @@ const RM_CHOICES = [1, 2, 3, 4, 5, 6, 8, 10];
 // return an error message.
 function openWorkoutEditor(client, workout, onSaved, opts = {}) {
   const tpl = opts.template;
+  const logNow = !!opts.logNow;
   const isNew = !workout?.id;
-  const title = h('input', { required: true, maxlength: '120', value: workout?.title || '', placeholder: 'e.g. Lower body strength' });
+  const title = h('input', { required: true, maxlength: '120', value: workout?.title || (logNow ? `Session with ${TRAINER_NAME}` : ''), placeholder: 'e.g. Lower body strength' });
   const date = h('input', { type: 'date', value: workout ? (workout.workout_date || '') : today() });
   const notes = h('textarea', { rows: '3', value: workout?.notes || '', placeholder: 'Warm-up, focus points, how it should feel…' });
   const rows = (workout?.exercises || []).map((e) => ({ ...blankExercise(), ...e }));
@@ -1402,17 +1404,18 @@ function openWorkoutEditor(client, workout, onSaved, opts = {}) {
   drawRows();
 
   openDialog({
-    title: tpl ? tpl.label : isNew ? `New workout for ${client.full_name}` : 'Edit workout',
+    title: tpl ? tpl.label : logNow ? `Session with ${client.full_name}` : isNew ? `New workout for ${client.full_name}` : 'Edit workout',
     wide: true,
-    altSubmitLabel: tpl ? null : 'Save as draft',
-    submitLabel: tpl ? 'Save workout' : workout?.id && !workout.is_draft ? 'Save' : 'Publish',
+    altSubmitLabel: tpl || logNow ? null : 'Save as draft',
+    submitLabel: tpl ? 'Save workout' : logNow ? 'Next: enter weights and reps' : workout?.id && !workout.is_draft ? 'Save' : 'Publish',
     fields: [
+      logNow ? h('p', { class: 'muted small' }, `Add the exercises you're doing together. Next you'll enter the weights and reps, and it's saved to ${firstName(client.full_name)}'s history.`) : null,
       field('Title', title),
-      tpl ? null : field('Date', date, 'Leave empty for a workout they can do any time.'),
-      field('Notes', notes),
+      tpl ? null : field('Date', date, logNow ? null : 'Leave empty for a workout they can do any time.'),
+      logNow ? null : field('Notes', notes),
       libraryDatalist(),
       h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Exercises'),
-        h('span', { class: 'muted small' }, 'Pick from your library or type a new name (new names are added to the library). For a percentage, fill in "% of max" and choose which rep max; the client sees the weight worked out for them.'),
+        logNow ? null : h('span', { class: 'muted small' }, 'Pick from your library or type a new name (new names are added to the library). For a percentage, fill in "% of max" and choose which rep max; the client sees the weight worked out for them.'),
         exList,
         h('button', { type: 'button', class: 'btn', onclick: () => { rows.push(blankExercise()); drawRows(); exList.lastChild?.querySelector('input')?.focus(); } }, '+ Add exercise')),
     ],
@@ -1453,6 +1456,15 @@ function openWorkoutEditor(client, workout, onSaved, opts = {}) {
         exercises,
         is_draft: action === 'alt',
       };
+      if (logNow) {
+        if (!exercises.length) return 'Add at least one exercise.';
+        const { data: w, error: insError } = await sb.from('workouts').insert(payload).select().single();
+        if (insError) return insError.message;
+        const ctx = await loadTrainingData(client.id);
+        // Opens once this dialog has closed.
+        setTimeout(() => openLogDialog(w, { clientId: client.id, ...ctx, feedback: null, asTrainer: true, onSaved }), 0);
+        return;
+      }
       const { error } = isNew
         ? await sb.from('workouts').insert(payload)
         : await sb.from('workouts').update(payload).eq('id', workout.id);
@@ -1463,6 +1475,27 @@ function openWorkoutEditor(client, workout, onSaved, opts = {}) {
       onSaved();
     },
   });
+}
+
+// A read-only look at a workout (a program's workouts have no date or log).
+function openWorkoutView(t, { label = '', onEdit = null } = {}) {
+  const exercises = Array.isArray(t.exercises) ? t.exercises : [];
+  const dlg = h('dialog', { class: 'dialog wide', 'aria-labelledby': 'workout-view-title' },
+    label ? h('p', { class: 'eyebrow' }, label) : null,
+    h('h2', { id: 'workout-view-title' }, t.title || 'Workout'),
+    t.notes ? h('p', { class: 'notes' }, t.notes) : null,
+    exercises.length
+      ? h('ol', { class: 'exercise-list' }, exercises.map((e) => h('li', {},
+          h('span', { class: 'ex-title' }, e.name),
+          prescription(e) ? h('span', { class: 'ex-meta' }, prescription(e)) : null,
+          e.notes ? h('span', { class: 'ex-notes' }, e.notes) : null)))
+      : h('p', { class: 'muted small' }, 'No exercises listed.'),
+    h('form', { method: 'dialog', class: 'dialog-actions' },
+      onEdit ? h('button', { type: 'button', class: 'btn', onclick: () => { dlg.close(); onEdit(); } }, 'Edit') : h('span'),
+      h('button', { class: 'btn primary' }, 'Close')));
+  dlg.addEventListener('close', () => dlg.remove());
+  document.body.append(dlg);
+  dlg.showModal();
 }
 
 // ---------------------------------------------------------------------------
@@ -3452,6 +3485,7 @@ function programCard(c, pr, refresh) {
       h('span', { class: 'slot-letter', 'aria-hidden': 'true' }, letter(i)),
       h('span', { class: 'slot-name' }, t?.title || h('span', { class: 'muted' }, 'Not written yet'),
         t ? h('span', { class: 'muted small' }, ` · ${t.exercises?.length || 0} exercise${t.exercises?.length === 1 ? '' : 's'}`) : null),
+      t ? h('button', { class: 'btn ghost small', onclick: () => openWorkoutView(t, { label: `${pr.title} · workout ${letter(i)}`, onEdit: pr.status === 'scheduled' ? null : () => editTemplate(i) }) }, 'View') : null,
       pr.status === 'scheduled' ? null : h('button', { class: 'btn ghost small', onclick: () => editTemplate(i) }, t ? 'Edit' : 'Write'));
   }));
   const actions = [
