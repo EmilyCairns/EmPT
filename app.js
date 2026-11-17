@@ -2180,6 +2180,19 @@ async function loadLibrary() {
 
 const libKey = (name) => String(name || '').trim().toLowerCase();
 // Finds the library entry for a workout exercise: by id, else by name.
+// Exercise pictures live in icons/exercises/. The library row's `icon`
+// wins; otherwise the name is looked up in icons/exercises/icons.json.
+let iconNames = new Map();
+fetch('icons/exercises/icons.json').then((r) => (r.ok ? r.json() : null)).then((d) => {
+  for (const i of d?.icons || []) for (const n of i.names || []) iconNames.set(libKey(n.replace(/’/g, "'")), `${i.slug}.svg`);
+}).catch(() => {});
+function exerciseIcon(e, cls = 'ex-icon') {
+  const lib = 'icon' in e ? e : findLib(e);
+  const file = lib?.icon || iconNames.get(libKey(e.name || ''));
+  if (!file || !/^[a-z0-9-]+\.svg$/.test(file)) return null;
+  return h('img', { class: cls, src: `icons/exercises/${file}`, alt: '', loading: 'lazy', decoding: 'async' });
+}
+
 function findLib(e) {
   return state.library.find((x) => e.exercise_id && x.id === e.exercise_id)
     || state.library.find((x) => libKey(x.name) === libKey(e.name))
@@ -2909,9 +2922,11 @@ async function renderWorkoutPage() {
   warmupCard = warmups.length ? h('section', { class: 'log-warmup' + (warmupDone ? ' is-done' : '') },
     h('p', { class: 'group-head' }, 'Warm up'),
     h('ul', { class: 'warmup-list' }, warmups.flatMap((sec) => sec.items).map(({ e }) => h('li', {},
-      h('b', {}, e.name),
-      h('span', { class: 'ex-meta' }, [e.sets && Number(e.sets) > 1 ? `${e.sets} ×` : null, e.reps ? repsText(e.reps) : null].filter(Boolean).join(' ')),
-      e.notes ? h('span', { class: 'ex-notes' }, e.notes) : null))),
+      exerciseIcon(e, 'ex-icon sm') || h('span'),
+      h('span', { class: 'wu-text' },
+        h('b', {}, e.name),
+        h('span', { class: 'ex-meta' }, [e.sets && Number(e.sets) > 1 ? `${e.sets} ×` : null, e.reps ? repsText(e.reps) : null].filter(Boolean).join(' ')),
+        e.notes ? h('span', { class: 'ex-notes' }, e.notes) : null)))),
     h('label', { class: 'check warmup-tick' }, warmupTick, h('span', {}, 'Warm up done'))) : null;
 
   function logBlock(e, i, label, restAfter, extraClass) {
@@ -2987,6 +3002,7 @@ async function renderWorkoutPage() {
     }, 'Info') : null;
     const el = h('section', { class: `log-ex ${extraClass}`.trim() },
       h('div', { class: 'ex-top' },
+        exerciseIcon(e),
         h('span', { class: 'ex-slot', 'aria-hidden': 'true' }, label),
         h('h2', {}, h('button', { type: 'button', class: 'ex-name', 'aria-label': `${e.name}: see your history for this lift`, onclick: () => openLiftHistory(e, ctx) }, e.name)),
         infoBtn,
@@ -4168,7 +4184,8 @@ function renderLibraryPanel() {
     const q = libKey(search.value);
     const items = state.library.filter((x) => libKey(x.name).includes(q));
     fill(list, items.length
-      ? items.map((x) => h('button', { class: 'client-item', onclick: () => openExerciseDialog(x) },
+      ? items.map((x) => h('button', { class: 'client-item lib-item', onclick: () => openExerciseDialog(x) },
+          exerciseIcon(x, 'ex-icon lib-icon'),
           h('span', { class: 'client-name' }, x.name),
           h('span', { class: 'muted small' }, [isBarbell(x) ? 'Barbell' : null, safeUrl(x.video_url) ? 'Demo video' : null, x.cues ? 'Coaching cues' : null].filter(Boolean).join(' · ') || 'No video or cues yet')))
       : h('p', { class: 'muted pad' }, state.library.length

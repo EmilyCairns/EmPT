@@ -113,6 +113,8 @@ alter table public.exercises add column if not exists is_barbell boolean;
 -- Exercises done with no weight (bands, bodyweight, stretches, foam
 -- rolling): clients get no kg box. null = decide from the exercise name.
 alter table public.exercises add column if not exists uses_weight boolean;
+-- The exercise's picture: a file name in icons/exercises/ (e.g. back-squat.svg).
+alter table public.exercises add column if not exists icon text check (icon is null or icon ~ '^[a-z0-9-]+\.svg$');
 
 -- Rep maxes (1RM, 3RM, 5RM…) per client and exercise. Each test is a new
 -- row, so history is kept; the latest one for a rep count is "current".

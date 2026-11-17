@@ -225,6 +225,8 @@ New components must reuse existing tokens. If a new one is genuinely needed, add
 4. The contrast rules in section 3 apply to every colour pairing.
 5. Animation stays subtle (`--motion-fast`) and turns off when the device asks for reduced motion. **The one exception is the "Week sealed!" stamp** (`--motion-stamp`), a single celebratory moment shown once a week; it also turns off for reduced motion.
 
+**Exercise pictures** (`icons/exercises/`, the owner's own set): warm ink figures with a little bun, terracotta for the thing that moves, beige equipment, on a soft peach circle, 48×48. Shown at 40px beside the exercise name on the workout page and in the exercise library, and smaller in the warm-up list. Their colours are fixed in the files (see `icons/exercises/README.md`). Add new ones in the same style and list them in `icons.json`.
+
 ## 10. Brand colour outside the tokens
 
 These files can't read `design-tokens.css`. Update them by hand if the palette changes:
