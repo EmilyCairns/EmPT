@@ -5,588 +5,588 @@
       "names": [
         "Back Squat"
       ],
-      "file": "svg/back-squat.svg"
+      "file": "back-squat.svg"
     },
     {
       "slug": "deadlift",
       "names": [
         "Deadlift"
       ],
-      "file": "svg/deadlift.svg"
+      "file": "deadlift.svg"
     },
     {
       "slug": "bench-press",
       "names": [
         "Bench Press"
       ],
-      "file": "svg/bench-press.svg"
+      "file": "bench-press.svg"
     },
     {
       "slug": "strict-press",
       "names": [
         "Strict Press"
       ],
-      "file": "svg/strict-press.svg"
+      "file": "strict-press.svg"
     },
     {
       "slug": "barbell-row",
       "names": [
         "Barbell Row"
       ],
-      "file": "svg/barbell-row.svg"
+      "file": "barbell-row.svg"
     },
     {
       "slug": "lunge",
       "names": [
         "Walking Lunge"
       ],
-      "file": "svg/lunge.svg"
+      "file": "lunge.svg"
     },
     {
       "slug": "kettlebell-swing",
       "names": [
         "Kettlebell Swing"
       ],
-      "file": "svg/kettlebell-swing.svg"
+      "file": "kettlebell-swing.svg"
     },
     {
       "slug": "hip-thrust",
       "names": [
         "Hip Thrust"
       ],
-      "file": "svg/hip-thrust.svg"
+      "file": "hip-thrust.svg"
     },
     {
       "slug": "dumbbell-curl",
       "names": [
         "Dumbbell Curl"
       ],
-      "file": "svg/dumbbell-curl.svg"
+      "file": "dumbbell-curl.svg"
     },
     {
       "slug": "farmer-carry",
       "names": [
         "Farmer Carry"
       ],
-      "file": "svg/farmer-carry.svg"
+      "file": "farmer-carry.svg"
     },
     {
       "slug": "push-up",
       "names": [
         "Push-up"
       ],
-      "file": "svg/push-up.svg"
+      "file": "push-up.svg"
     },
     {
       "slug": "pull-up",
       "names": [
         "Pull-up"
       ],
-      "file": "svg/pull-up.svg"
+      "file": "pull-up.svg"
     },
     {
       "slug": "plank",
       "names": [
         "Plank"
       ],
-      "file": "svg/plank.svg"
+      "file": "plank.svg"
     },
     {
       "slug": "sit-up",
       "names": [
         "Sit-up"
       ],
-      "file": "svg/sit-up.svg"
+      "file": "sit-up.svg"
     },
     {
       "slug": "burpee",
       "names": [
         "Burpee"
       ],
-      "file": "svg/burpee.svg"
+      "file": "burpee.svg"
     },
     {
       "slug": "box-jump",
       "names": [
         "Box Jump"
       ],
-      "file": "svg/box-jump.svg"
+      "file": "box-jump.svg"
     },
     {
       "slug": "handstand",
       "names": [
         "Handstand"
       ],
-      "file": "svg/handstand.svg"
+      "file": "handstand.svg"
     },
     {
       "slug": "row-erg",
       "names": [
         "Row (Erg)"
       ],
-      "file": "svg/row-erg.svg"
+      "file": "row-erg.svg"
     },
     {
       "slug": "air-bike",
       "names": [
         "Air Bike"
       ],
-      "file": "svg/air-bike.svg"
+      "file": "air-bike.svg"
     },
     {
       "slug": "run",
       "names": [
         "Run"
       ],
-      "file": "svg/run.svg"
+      "file": "run.svg"
     },
     {
       "slug": "jump-rope",
       "names": [
         "Double-unders"
       ],
-      "file": "svg/jump-rope.svg"
+      "file": "jump-rope.svg"
     },
     {
       "slug": "wall-ball",
       "names": [
         "Wall Ball"
       ],
-      "file": "svg/wall-ball.svg"
+      "file": "wall-ball.svg"
     },
     {
       "slug": "stretch",
       "names": [
         "Mobility"
       ],
-      "file": "svg/stretch.svg"
+      "file": "stretch.svg"
     },
     {
       "slug": "rest",
       "names": [
         "Rest Day"
       ],
-      "file": "svg/rest.svg"
+      "file": "rest.svg"
     },
     {
       "slug": "angled-leg-press",
       "names": [
         "Angled Machine Leg Press"
       ],
-      "file": "svg/angled-leg-press.svg"
+      "file": "angled-leg-press.svg"
     },
     {
       "slug": "band-pull-up",
       "names": [
         "Band Assisted Pull Up"
       ],
-      "file": "svg/band-pull-up.svg"
+      "file": "band-pull-up.svg"
     },
     {
       "slug": "band-push-up",
       "names": [
         "Band Assisted Push Up"
       ],
-      "file": "svg/band-push-up.svg"
+      "file": "band-push-up.svg"
     },
     {
       "slug": "barbell-hip-thrust",
       "names": [
         "Barbell Hip Thrust"
       ],
-      "file": "svg/barbell-hip-thrust.svg"
+      "file": "barbell-hip-thrust.svg"
     },
     {
       "slug": "split-stance-rdl",
       "names": [
         "Barbell Split Stance Romanian Deadlift"
       ],
-      "file": "svg/split-stance-rdl.svg"
+      "file": "split-stance-rdl.svg"
     },
     {
       "slug": "bicycle-crunch",
       "names": [
         "Bicycle Crunch"
       ],
-      "file": "svg/bicycle-crunch.svg"
+      "file": "bicycle-crunch.svg"
     },
     {
       "slug": "box-glute-stretch",
       "names": [
         "Box Glute Stretch"
       ],
-      "file": "svg/box-glute-stretch.svg"
+      "file": "box-glute-stretch.svg"
     },
     {
       "slug": "cable-tricep-extension",
       "names": [
         "Cable Rope Tricep Extension"
       ],
-      "file": "svg/cable-tricep-extension.svg"
+      "file": "cable-tricep-extension.svg"
     },
     {
       "slug": "cable-seated-row",
       "names": [
         "Cable Seated Row"
       ],
-      "file": "svg/cable-seated-row.svg"
+      "file": "cable-seated-row.svg"
     },
     {
       "slug": "db-bench-press",
       "names": [
         "Dumbbell Bench Press"
       ],
-      "file": "svg/db-bench-press.svg"
+      "file": "db-bench-press.svg"
     },
     {
       "slug": "db-bicep-curl",
       "names": [
         "Dumbbell Bicep Curl"
       ],
-      "file": "svg/db-bicep-curl.svg"
+      "file": "db-bicep-curl.svg"
     },
     {
       "slug": "db-bulgarian-split-squat",
       "names": [
         "Dumbbell Bulgarian Split Squat"
       ],
-      "file": "svg/db-bulgarian-split-squat.svg"
+      "file": "db-bulgarian-split-squat.svg"
     },
     {
       "slug": "db-hammer-curl",
       "names": [
         "Dumbbell Hammer Curl"
       ],
-      "file": "svg/db-hammer-curl.svg"
+      "file": "db-hammer-curl.svg"
     },
     {
       "slug": "db-lateral-raise",
       "names": [
         "Dumbbell Lateral Raise"
       ],
-      "file": "svg/db-lateral-raise.svg"
+      "file": "db-lateral-raise.svg"
     },
     {
       "slug": "db-single-leg-calf-raise",
       "names": [
         "Dumbbell Single Leg Calf Raise"
       ],
-      "file": "svg/db-single-leg-calf-raise.svg"
+      "file": "db-single-leg-calf-raise.svg"
     },
     {
       "slug": "db-skull-crusher",
       "names": [
         "Dumbbell Triceps Skull Crusher"
       ],
-      "file": "svg/db-skull-crusher.svg"
+      "file": "db-skull-crusher.svg"
     },
     {
       "slug": "eccentric-push-up",
       "names": [
         "Eccentric Push Up"
       ],
-      "file": "svg/eccentric-push-up.svg"
+      "file": "eccentric-push-up.svg"
     },
     {
       "slug": "elbow-plank",
       "names": [
         "Elbow Plank Hold"
       ],
-      "file": "svg/elbow-plank.svg"
+      "file": "elbow-plank.svg"
     },
     {
       "slug": "foam-roll-adductor",
       "names": [
         "Foam Roller Adductor"
       ],
-      "file": "svg/foam-roll-adductor.svg"
+      "file": "foam-roll-adductor.svg"
     },
     {
       "slug": "foam-roll-itb",
       "names": [
         "Foam Rolling for ITB Release"
       ],
-      "file": "svg/foam-roll-itb.svg"
+      "file": "foam-roll-itb.svg"
     },
     {
       "slug": "roller-glute-bridge",
       "names": [
         "Glute Bridge with Foam Roller"
       ],
-      "file": "svg/roller-glute-bridge.svg"
+      "file": "roller-glute-bridge.svg"
     },
     {
       "slug": "high-side-plank-abduction",
       "names": [
         "High Side Plank with Abduction"
       ],
-      "file": "svg/high-side-plank-abduction.svg"
+      "file": "high-side-plank-abduction.svg"
     },
     {
       "slug": "hip-airplane",
       "names": [
         "Hip Airplane"
       ],
-      "file": "svg/hip-airplane.svg"
+      "file": "hip-airplane.svg"
     },
     {
       "slug": "roman-chair-hip-extension",
       "names": [
         "Hip Extension on Roman Chair"
       ],
-      "file": "svg/roman-chair-hip-extension.svg"
+      "file": "roman-chair-hip-extension.svg"
     },
     {
       "slug": "inchworm-walk",
       "names": [
         "Inchworm Walk"
       ],
-      "file": "svg/inchworm-walk.svg"
+      "file": "inchworm-walk.svg"
     },
     {
       "slug": "incline-push-up",
       "names": [
         "Incline Push Up"
       ],
-      "file": "svg/incline-push-up.svg"
+      "file": "incline-push-up.svg"
     },
     {
       "slug": "jumping-chin-up",
       "names": [
         "Jumping Chin Up"
       ],
-      "file": "svg/jumping-chin-up.svg"
+      "file": "jumping-chin-up.svg"
     },
     {
       "slug": "kb-farmers-carry",
       "names": [
         "KB Farmer’s Carry"
       ],
-      "file": "svg/kb-farmers-carry.svg"
+      "file": "kb-farmers-carry.svg"
     },
     {
       "slug": "kb-goblet-squat",
       "names": [
         "Kettlebell Goblet Squat"
       ],
-      "file": "svg/kb-goblet-squat.svg"
+      "file": "kb-goblet-squat.svg"
     },
     {
       "slug": "kb-gorilla-row",
       "names": [
         "Kettlebell Gorilla Alternating Row"
       ],
-      "file": "svg/kb-gorilla-row.svg"
+      "file": "kb-gorilla-row.svg"
     },
     {
       "slug": "knee-up-crunch",
       "names": [
         "Knee Up Crunch"
       ],
-      "file": "svg/knee-up-crunch.svg"
+      "file": "knee-up-crunch.svg"
     },
     {
       "slug": "leverage-bench-press",
       "names": [
         "Leverage Bench Press"
       ],
-      "file": "svg/leverage-bench-press.svg"
+      "file": "leverage-bench-press.svg"
     },
     {
       "slug": "machine-assisted-pull-up",
       "names": [
         "Machine Assisted Wide Grip Pull Up"
       ],
-      "file": "svg/machine-assisted-pull-up.svg"
+      "file": "machine-assisted-pull-up.svg"
     },
     {
       "slug": "machine-seated-abduction",
       "names": [
         "Machine Seated Abduction"
       ],
-      "file": "svg/machine-seated-abduction.svg"
+      "file": "machine-seated-abduction.svg"
     },
     {
       "slug": "machine-chest-press",
       "names": [
         "Machine Seated Chest Press"
       ],
-      "file": "svg/machine-chest-press.svg"
+      "file": "machine-chest-press.svg"
     },
     {
       "slug": "machine-neutral-row",
       "names": [
         "Machine Seated Neutral Grip Row"
       ],
-      "file": "svg/machine-neutral-row.svg"
+      "file": "machine-neutral-row.svg"
     },
     {
       "slug": "machine-shoulder-press",
       "names": [
         "Machine Seated Shoulder Press"
       ],
-      "file": "svg/machine-shoulder-press.svg"
+      "file": "machine-shoulder-press.svg"
     },
     {
       "slug": "machine-standing-calf-raise",
       "names": [
         "Machine Standing Calf Raise"
       ],
-      "file": "svg/machine-standing-calf-raise.svg"
+      "file": "machine-standing-calf-raise.svg"
     },
     {
       "slug": "mini-band-clamshell",
       "names": [
         "Mini Band Clamshell"
       ],
-      "file": "svg/mini-band-clamshell.svg"
+      "file": "mini-band-clamshell.svg"
     },
     {
       "slug": "mini-band-hip-lifted-clamshell",
       "names": [
         "Mini Band Hip Lifted Clamshell"
       ],
-      "file": "svg/mini-band-hip-lifted-clamshell.svg"
+      "file": "mini-band-hip-lifted-clamshell.svg"
     },
     {
       "slug": "mini-band-lateral-walk",
       "names": [
         "Mini Band Lateral Squat Walk"
       ],
-      "file": "svg/mini-band-lateral-walk.svg"
+      "file": "mini-band-lateral-walk.svg"
     },
     {
       "slug": "mini-band-single-leg-bridge",
       "names": [
         "Mini Band Single Leg Glute Bridge"
       ],
-      "file": "svg/mini-band-single-leg-bridge.svg"
+      "file": "mini-band-single-leg-bridge.svg"
     },
     {
       "slug": "mini-band-squat",
       "names": [
         "Mini Band Squat"
       ],
-      "file": "svg/mini-band-squat.svg"
+      "file": "mini-band-squat.svg"
     },
     {
       "slug": "mini-band-hip-abduction",
       "names": [
         "Mini Band Standing Hip Abduction"
       ],
-      "file": "svg/mini-band-hip-abduction.svg"
+      "file": "mini-band-hip-abduction.svg"
     },
     {
       "slug": "neutral-lat-pulldown",
       "names": [
         "Neutral Grip Lat Pulldown"
       ],
-      "file": "svg/neutral-lat-pulldown.svg"
+      "file": "neutral-lat-pulldown.svg"
     },
     {
       "slug": "pass-through",
       "names": [
         "Pass Through"
       ],
-      "file": "svg/pass-through.svg"
+      "file": "pass-through.svg"
     },
     {
       "slug": "plank-high",
       "names": [
         "Plank"
       ],
-      "file": "svg/plank-high.svg"
+      "file": "plank-high.svg"
     },
     {
       "slug": "reverse-lunge",
       "names": [
         "Reverse Lunge"
       ],
-      "file": "svg/reverse-lunge.svg"
+      "file": "reverse-lunge.svg"
     },
     {
       "slug": "romanian-deadlift",
       "names": [
         "Romanian Deadlift"
       ],
-      "file": "svg/romanian-deadlift.svg"
+      "file": "romanian-deadlift.svg"
     },
     {
       "slug": "russian-twist",
       "names": [
         "Russian Twist"
       ],
-      "file": "svg/russian-twist.svg"
+      "file": "russian-twist.svg"
     },
     {
       "slug": "kb-overhead-march",
       "names": [
         "Single Kettlebell Overhead March"
       ],
-      "file": "svg/kb-overhead-march.svg"
+      "file": "kb-overhead-march.svg"
     },
     {
       "slug": "single-leg-glute-bridge",
       "names": [
         "Single Leg Glute Bridge"
       ],
-      "file": "svg/single-leg-glute-bridge.svg"
+      "file": "single-leg-glute-bridge.svg"
     },
     {
       "slug": "single-seated-leg-press",
       "names": [
         "Single Seated Leg Press"
       ],
-      "file": "svg/single-seated-leg-press.svg"
+      "file": "single-seated-leg-press.svg"
     },
     {
       "slug": "single-arm-db-row",
       "names": [
         "Single-arm Dumbbell Row"
       ],
-      "file": "svg/single-arm-db-row.svg"
+      "file": "single-arm-db-row.svg"
     },
     {
       "slug": "smith-back-squat",
       "names": [
         "Smith Machine Back Squat"
       ],
-      "file": "svg/smith-back-squat.svg"
+      "file": "smith-back-squat.svg"
     },
     {
       "slug": "smith-deadlift",
       "names": [
         "Smith Machine Deadlift"
       ],
-      "file": "svg/smith-deadlift.svg"
+      "file": "smith-deadlift.svg"
     },
     {
       "slug": "smith-split-squat",
       "names": [
         "Smith Machine Split Squat"
       ],
-      "file": "svg/smith-split-squat.svg"
+      "file": "smith-split-squat.svg"
     },
     {
       "slug": "stability-lunge",
       "names": [
         "Stability Lunge"
       ],
-      "file": "svg/stability-lunge.svg"
+      "file": "stability-lunge.svg"
     },
     {
       "slug": "standing-banded-clamshell",
       "names": [
         "Standing Banded Clamshell"
       ],
-      "file": "svg/standing-banded-clamshell.svg"
+      "file": "standing-banded-clamshell.svg"
     },
     {
       "slug": "superband-pull-apart",
       "names": [
         "Superband Pull Apart"
       ],
-      "file": "svg/superband-pull-apart.svg"
+      "file": "superband-pull-apart.svg"
     }
   ],
   "program_list": [

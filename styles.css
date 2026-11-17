@@ -1585,3 +1585,11 @@ button.link:focus-visible { outline: var(--border-width-strong) solid var(--colo
 .warmup-list .ex-notes { flex-basis: 100%; margin: 0; color: var(--color-text-muted); }
 .warmup-tick { margin-top: var(--space-4); font-weight: var(--weight-semibold); }
 .log-warmup.is-done .warmup-list { opacity: 0.6; }
+/* Exercise pictures (icons/exercises/): 40px beside a name, smaller in the warm-up. */
+.ex-icon { flex-shrink: 0; width: var(--space-10); height: var(--space-10); }
+.ex-icon.sm { width: calc(var(--space-6) + var(--space-1)); height: calc(var(--space-6) + var(--space-1)); }
+.warmup-list li { display: grid; grid-template-columns: calc(var(--space-6) + var(--space-1)) 1fr; align-items: start; gap: var(--space-3); }
+.wu-text { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); }
+.client-item.lib-item { display: grid; grid-template-columns: var(--space-10) 1fr; column-gap: var(--space-3); align-items: center; }
+.lib-item .lib-icon { grid-row: span 2; }
+.lib-item > :not(.lib-icon) { grid-column: 2; }
