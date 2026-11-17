@@ -1,0 +1,906 @@
+{
+  "icons": [
+    {
+      "slug": "back-squat",
+      "names": [
+        "Back Squat"
+      ],
+      "file": "svg/back-squat.svg"
+    },
+    {
+      "slug": "deadlift",
+      "names": [
+        "Deadlift"
+      ],
+      "file": "svg/deadlift.svg"
+    },
+    {
+      "slug": "bench-press",
+      "names": [
+        "Bench Press"
+      ],
+      "file": "svg/bench-press.svg"
+    },
+    {
+      "slug": "strict-press",
+      "names": [
+        "Strict Press"
+      ],
+      "file": "svg/strict-press.svg"
+    },
+    {
+      "slug": "barbell-row",
+      "names": [
+        "Barbell Row"
+      ],
+      "file": "svg/barbell-row.svg"
+    },
+    {
+      "slug": "lunge",
+      "names": [
+        "Walking Lunge"
+      ],
+      "file": "svg/lunge.svg"
+    },
+    {
+      "slug": "kettlebell-swing",
+      "names": [
+        "Kettlebell Swing"
+      ],
+      "file": "svg/kettlebell-swing.svg"
+    },
+    {
+      "slug": "hip-thrust",
+      "names": [
+        "Hip Thrust"
+      ],
+      "file": "svg/hip-thrust.svg"
+    },
+    {
+      "slug": "dumbbell-curl",
+      "names": [
+        "Dumbbell Curl"
+      ],
+      "file": "svg/dumbbell-curl.svg"
+    },
+    {
+      "slug": "farmer-carry",
+      "names": [
+        "Farmer Carry"
+      ],
+      "file": "svg/farmer-carry.svg"
+    },
+    {
+      "slug": "push-up",
+      "names": [
+        "Push-up"
+      ],
+      "file": "svg/push-up.svg"
+    },
+    {
+      "slug": "pull-up",
+      "names": [
+        "Pull-up"
+      ],
+      "file": "svg/pull-up.svg"
+    },
+    {
+      "slug": "plank",
+      "names": [
+        "Plank"
+      ],
+      "file": "svg/plank.svg"
+    },
+    {
+      "slug": "sit-up",
+      "names": [
+        "Sit-up"
+      ],
+      "file": "svg/sit-up.svg"
+    },
+    {
+      "slug": "burpee",
+      "names": [
+        "Burpee"
+      ],
+      "file": "svg/burpee.svg"
+    },
+    {
+      "slug": "box-jump",
+      "names": [
+        "Box Jump"
+      ],
+      "file": "svg/box-jump.svg"
+    },
+    {
+      "slug": "handstand",
+      "names": [
+        "Handstand"
+      ],
+      "file": "svg/handstand.svg"
+    },
+    {
+      "slug": "row-erg",
+      "names": [
+        "Row (Erg)"
+      ],
+      "file": "svg/row-erg.svg"
+    },
+    {
+      "slug": "air-bike",
+      "names": [
+        "Air Bike"
+      ],
+      "file": "svg/air-bike.svg"
+    },
+    {
+      "slug": "run",
+      "names": [
+        "Run"
+      ],
+      "file": "svg/run.svg"
+    },
+    {
+      "slug": "jump-rope",
+      "names": [
+        "Double-unders"
+      ],
+      "file": "svg/jump-rope.svg"
+    },
+    {
+      "slug": "wall-ball",
+      "names": [
+        "Wall Ball"
+      ],
+      "file": "svg/wall-ball.svg"
+    },
+    {
+      "slug": "stretch",
+      "names": [
+        "Mobility"
+      ],
+      "file": "svg/stretch.svg"
+    },
+    {
+      "slug": "rest",
+      "names": [
+        "Rest Day"
+      ],
+      "file": "svg/rest.svg"
+    },
+    {
+      "slug": "angled-leg-press",
+      "names": [
+        "Angled Machine Leg Press"
+      ],
+      "file": "svg/angled-leg-press.svg"
+    },
+    {
+      "slug": "band-pull-up",
+      "names": [
+        "Band Assisted Pull Up"
+      ],
+      "file": "svg/band-pull-up.svg"
+    },
+    {
+      "slug": "band-push-up",
+      "names": [
+        "Band Assisted Push Up"
+      ],
+      "file": "svg/band-push-up.svg"
+    },
+    {
+      "slug": "barbell-hip-thrust",
+      "names": [
+        "Barbell Hip Thrust"
+      ],
+      "file": "svg/barbell-hip-thrust.svg"
+    },
+    {
+      "slug": "split-stance-rdl",
+      "names": [
+        "Barbell Split Stance Romanian Deadlift"
+      ],
+      "file": "svg/split-stance-rdl.svg"
+    },
+    {
+      "slug": "bicycle-crunch",
+      "names": [
+        "Bicycle Crunch"
+      ],
+      "file": "svg/bicycle-crunch.svg"
+    },
+    {
+      "slug": "box-glute-stretch",
+      "names": [
+        "Box Glute Stretch"
+      ],
+      "file": "svg/box-glute-stretch.svg"
+    },
+    {
+      "slug": "cable-tricep-extension",
+      "names": [
+        "Cable Rope Tricep Extension"
+      ],
+      "file": "svg/cable-tricep-extension.svg"
+    },
+    {
+      "slug": "cable-seated-row",
+      "names": [
+        "Cable Seated Row"
+      ],
+      "file": "svg/cable-seated-row.svg"
+    },
+    {
+      "slug": "db-bench-press",
+      "names": [
+        "Dumbbell Bench Press"
+      ],
+      "file": "svg/db-bench-press.svg"
+    },
+    {
+      "slug": "db-bicep-curl",
+      "names": [
+        "Dumbbell Bicep Curl"
+      ],
+      "file": "svg/db-bicep-curl.svg"
+    },
+    {
+      "slug": "db-bulgarian-split-squat",
+      "names": [
+        "Dumbbell Bulgarian Split Squat"
+      ],
+      "file": "svg/db-bulgarian-split-squat.svg"
+    },
+    {
+      "slug": "db-hammer-curl",
+      "names": [
+        "Dumbbell Hammer Curl"
+      ],
+      "file": "svg/db-hammer-curl.svg"
+    },
+    {
+      "slug": "db-lateral-raise",
+      "names": [
+        "Dumbbell Lateral Raise"
+      ],
+      "file": "svg/db-lateral-raise.svg"
+    },
+    {
+      "slug": "db-single-leg-calf-raise",
+      "names": [
+        "Dumbbell Single Leg Calf Raise"
+      ],
+      "file": "svg/db-single-leg-calf-raise.svg"
+    },
+    {
+      "slug": "db-skull-crusher",
+      "names": [
+        "Dumbbell Triceps Skull Crusher"
+      ],
+      "file": "svg/db-skull-crusher.svg"
+    },
+    {
+      "slug": "eccentric-push-up",
+      "names": [
+        "Eccentric Push Up"
+      ],
+      "file": "svg/eccentric-push-up.svg"
+    },
+    {
+      "slug": "elbow-plank",
+      "names": [
+        "Elbow Plank Hold"
+      ],
+      "file": "svg/elbow-plank.svg"
+    },
+    {
+      "slug": "foam-roll-adductor",
+      "names": [
+        "Foam Roller Adductor"
+      ],
+      "file": "svg/foam-roll-adductor.svg"
+    },
+    {
+      "slug": "foam-roll-itb",
+      "names": [
+        "Foam Rolling for ITB Release"
+      ],
+      "file": "svg/foam-roll-itb.svg"
+    },
+    {
+      "slug": "roller-glute-bridge",
+      "names": [
+        "Glute Bridge with Foam Roller"
+      ],
+      "file": "svg/roller-glute-bridge.svg"
+    },
+    {
+      "slug": "high-side-plank-abduction",
+      "names": [
+        "High Side Plank with Abduction"
+      ],
+      "file": "svg/high-side-plank-abduction.svg"
+    },
+    {
+      "slug": "hip-airplane",
+      "names": [
+        "Hip Airplane"
+      ],
+      "file": "svg/hip-airplane.svg"
+    },
+    {
+      "slug": "roman-chair-hip-extension",
+      "names": [
+        "Hip Extension on Roman Chair"
+      ],
+      "file": "svg/roman-chair-hip-extension.svg"
+    },
+    {
+      "slug": "inchworm-walk",
+      "names": [
+        "Inchworm Walk"
+      ],
+      "file": "svg/inchworm-walk.svg"
+    },
+    {
+      "slug": "incline-push-up",
+      "names": [
+        "Incline Push Up"
+      ],
+      "file": "svg/incline-push-up.svg"
+    },
+    {
+      "slug": "jumping-chin-up",
+      "names": [
+        "Jumping Chin Up"
+      ],
+      "file": "svg/jumping-chin-up.svg"
+    },
+    {
+      "slug": "kb-farmers-carry",
+      "names": [
+        "KB Farmer’s Carry"
+      ],
+      "file": "svg/kb-farmers-carry.svg"
+    },
+    {
+      "slug": "kb-goblet-squat",
+      "names": [
+        "Kettlebell Goblet Squat"
+      ],
+      "file": "svg/kb-goblet-squat.svg"
+    },
+    {
+      "slug": "kb-gorilla-row",
+      "names": [
+        "Kettlebell Gorilla Alternating Row"
+      ],
+      "file": "svg/kb-gorilla-row.svg"
+    },
+    {
+      "slug": "knee-up-crunch",
+      "names": [
+        "Knee Up Crunch"
+      ],
+      "file": "svg/knee-up-crunch.svg"
+    },
+    {
+      "slug": "leverage-bench-press",
+      "names": [
+        "Leverage Bench Press"
+      ],
+      "file": "svg/leverage-bench-press.svg"
+    },
+    {
+      "slug": "machine-assisted-pull-up",
+      "names": [
+        "Machine Assisted Wide Grip Pull Up"
+      ],
+      "file": "svg/machine-assisted-pull-up.svg"
+    },
+    {
+      "slug": "machine-seated-abduction",
+      "names": [
+        "Machine Seated Abduction"
+      ],
+      "file": "svg/machine-seated-abduction.svg"
+    },
+    {
+      "slug": "machine-chest-press",
+      "names": [
+        "Machine Seated Chest Press"
+      ],
+      "file": "svg/machine-chest-press.svg"
+    },
+    {
+      "slug": "machine-neutral-row",
+      "names": [
+        "Machine Seated Neutral Grip Row"
+      ],
+      "file": "svg/machine-neutral-row.svg"
+    },
+    {
+      "slug": "machine-shoulder-press",
+      "names": [
+        "Machine Seated Shoulder Press"
+      ],
+      "file": "svg/machine-shoulder-press.svg"
+    },
+    {
+      "slug": "machine-standing-calf-raise",
+      "names": [
+        "Machine Standing Calf Raise"
+      ],
+      "file": "svg/machine-standing-calf-raise.svg"
+    },
+    {
+      "slug": "mini-band-clamshell",
+      "names": [
+        "Mini Band Clamshell"
+      ],
+      "file": "svg/mini-band-clamshell.svg"
+    },
+    {
+      "slug": "mini-band-hip-lifted-clamshell",
+      "names": [
+        "Mini Band Hip Lifted Clamshell"
+      ],
+      "file": "svg/mini-band-hip-lifted-clamshell.svg"
+    },
+    {
+      "slug": "mini-band-lateral-walk",
+      "names": [
+        "Mini Band Lateral Squat Walk"
+      ],
+      "file": "svg/mini-band-lateral-walk.svg"
+    },
+    {
+      "slug": "mini-band-single-leg-bridge",
+      "names": [
+        "Mini Band Single Leg Glute Bridge"
+      ],
+      "file": "svg/mini-band-single-leg-bridge.svg"
+    },
+    {
+      "slug": "mini-band-squat",
+      "names": [
+        "Mini Band Squat"
+      ],
+      "file": "svg/mini-band-squat.svg"
+    },
+    {
+      "slug": "mini-band-hip-abduction",
+      "names": [
+        "Mini Band Standing Hip Abduction"
+      ],
+      "file": "svg/mini-band-hip-abduction.svg"
+    },
+    {
+      "slug": "neutral-lat-pulldown",
+      "names": [
+        "Neutral Grip Lat Pulldown"
+      ],
+      "file": "svg/neutral-lat-pulldown.svg"
+    },
+    {
+      "slug": "pass-through",
+      "names": [
+        "Pass Through"
+      ],
+      "file": "svg/pass-through.svg"
+    },
+    {
+      "slug": "plank-high",
+      "names": [
+        "Plank"
+      ],
+      "file": "svg/plank-high.svg"
+    },
+    {
+      "slug": "reverse-lunge",
+      "names": [
+        "Reverse Lunge"
+      ],
+      "file": "svg/reverse-lunge.svg"
+    },
+    {
+      "slug": "romanian-deadlift",
+      "names": [
+        "Romanian Deadlift"
+      ],
+      "file": "svg/romanian-deadlift.svg"
+    },
+    {
+      "slug": "russian-twist",
+      "names": [
+        "Russian Twist"
+      ],
+      "file": "svg/russian-twist.svg"
+    },
+    {
+      "slug": "kb-overhead-march",
+      "names": [
+        "Single Kettlebell Overhead March"
+      ],
+      "file": "svg/kb-overhead-march.svg"
+    },
+    {
+      "slug": "single-leg-glute-bridge",
+      "names": [
+        "Single Leg Glute Bridge"
+      ],
+      "file": "svg/single-leg-glute-bridge.svg"
+    },
+    {
+      "slug": "single-seated-leg-press",
+      "names": [
+        "Single Seated Leg Press"
+      ],
+      "file": "svg/single-seated-leg-press.svg"
+    },
+    {
+      "slug": "single-arm-db-row",
+      "names": [
+        "Single-arm Dumbbell Row"
+      ],
+      "file": "svg/single-arm-db-row.svg"
+    },
+    {
+      "slug": "smith-back-squat",
+      "names": [
+        "Smith Machine Back Squat"
+      ],
+      "file": "svg/smith-back-squat.svg"
+    },
+    {
+      "slug": "smith-deadlift",
+      "names": [
+        "Smith Machine Deadlift"
+      ],
+      "file": "svg/smith-deadlift.svg"
+    },
+    {
+      "slug": "smith-split-squat",
+      "names": [
+        "Smith Machine Split Squat"
+      ],
+      "file": "svg/smith-split-squat.svg"
+    },
+    {
+      "slug": "stability-lunge",
+      "names": [
+        "Stability Lunge"
+      ],
+      "file": "svg/stability-lunge.svg"
+    },
+    {
+      "slug": "standing-banded-clamshell",
+      "names": [
+        "Standing Banded Clamshell"
+      ],
+      "file": "svg/standing-banded-clamshell.svg"
+    },
+    {
+      "slug": "superband-pull-apart",
+      "names": [
+        "Superband Pull Apart"
+      ],
+      "file": "svg/superband-pull-apart.svg"
+    }
+  ],
+  "program_list": [
+    {
+      "number": 1,
+      "exercise": "Angled Machine Leg Press",
+      "slug": "angled-leg-press"
+    },
+    {
+      "number": 2,
+      "exercise": "Back Squat",
+      "slug": "back-squat"
+    },
+    {
+      "number": 3,
+      "exercise": "Band Assisted Pull Up",
+      "slug": "band-pull-up"
+    },
+    {
+      "number": 4,
+      "exercise": "Band Assisted Push Up",
+      "slug": "band-push-up"
+    },
+    {
+      "number": 5,
+      "exercise": "Barbell Hip Thrust",
+      "slug": "barbell-hip-thrust"
+    },
+    {
+      "number": 6,
+      "exercise": "Barbell Split Stance Romanian Deadlift",
+      "slug": "split-stance-rdl"
+    },
+    {
+      "number": 7,
+      "exercise": "Bicycle Crunch",
+      "slug": "bicycle-crunch"
+    },
+    {
+      "number": 8,
+      "exercise": "Box Glute Stretch",
+      "slug": "box-glute-stretch"
+    },
+    {
+      "number": 9,
+      "exercise": "Cable Rope Tricep Extension",
+      "slug": "cable-tricep-extension"
+    },
+    {
+      "number": 10,
+      "exercise": "Cable Seated Row",
+      "slug": "cable-seated-row"
+    },
+    {
+      "number": 11,
+      "exercise": "Dumbbell Bench Press",
+      "slug": "db-bench-press"
+    },
+    {
+      "number": 12,
+      "exercise": "Dumbbell Bicep Curl",
+      "slug": "db-bicep-curl"
+    },
+    {
+      "number": 13,
+      "exercise": "Dumbbell Bulgarian Split Squat",
+      "slug": "db-bulgarian-split-squat"
+    },
+    {
+      "number": 14,
+      "exercise": "Dumbbell Hammer Curl",
+      "slug": "db-hammer-curl"
+    },
+    {
+      "number": 15,
+      "exercise": "Dumbbell Lateral Raise",
+      "slug": "db-lateral-raise"
+    },
+    {
+      "number": 16,
+      "exercise": "Dumbbell Single Leg Calf Raise",
+      "slug": "db-single-leg-calf-raise"
+    },
+    {
+      "number": 17,
+      "exercise": "Dumbbell Triceps Skull Crusher",
+      "slug": "db-skull-crusher"
+    },
+    {
+      "number": 18,
+      "exercise": "Eccentric Push Up",
+      "slug": "eccentric-push-up"
+    },
+    {
+      "number": 19,
+      "exercise": "Elbow Plank Hold",
+      "slug": "elbow-plank"
+    },
+    {
+      "number": 20,
+      "exercise": "Foam Roller Adductor",
+      "slug": "foam-roll-adductor"
+    },
+    {
+      "number": 21,
+      "exercise": "Foam Rolling for ITB Release",
+      "slug": "foam-roll-itb"
+    },
+    {
+      "number": 22,
+      "exercise": "Glute Bridge with Foam Roller",
+      "slug": "roller-glute-bridge"
+    },
+    {
+      "number": 23,
+      "exercise": "High Side Plank with Abduction",
+      "slug": "high-side-plank-abduction"
+    },
+    {
+      "number": 24,
+      "exercise": "Hip Airplane",
+      "slug": "hip-airplane"
+    },
+    {
+      "number": 25,
+      "exercise": "Hip Extension on Roman Chair",
+      "slug": "roman-chair-hip-extension"
+    },
+    {
+      "number": 26,
+      "exercise": "Inchworm Walk",
+      "slug": "inchworm-walk"
+    },
+    {
+      "number": 27,
+      "exercise": "Incline Push Up",
+      "slug": "incline-push-up"
+    },
+    {
+      "number": 28,
+      "exercise": "Jumping Chin Up",
+      "slug": "jumping-chin-up"
+    },
+    {
+      "number": 29,
+      "exercise": "KB Farmer’s Carry",
+      "slug": "kb-farmers-carry"
+    },
+    {
+      "number": 30,
+      "exercise": "Kettlebell Goblet Squat",
+      "slug": "kb-goblet-squat"
+    },
+    {
+      "number": 31,
+      "exercise": "Kettlebell Gorilla Alternating Row",
+      "slug": "kb-gorilla-row"
+    },
+    {
+      "number": 32,
+      "exercise": "Knee Up Crunch",
+      "slug": "knee-up-crunch"
+    },
+    {
+      "number": 33,
+      "exercise": "Leverage Bench Press",
+      "slug": "leverage-bench-press"
+    },
+    {
+      "number": 34,
+      "exercise": "Machine Assisted Wide Grip Pull Up",
+      "slug": "machine-assisted-pull-up"
+    },
+    {
+      "number": 35,
+      "exercise": "Machine Seated Abduction",
+      "slug": "machine-seated-abduction"
+    },
+    {
+      "number": 36,
+      "exercise": "Machine Seated Chest Press",
+      "slug": "machine-chest-press"
+    },
+    {
+      "number": 37,
+      "exercise": "Machine Seated Neutral Grip Row",
+      "slug": "machine-neutral-row"
+    },
+    {
+      "number": 38,
+      "exercise": "Machine Seated Shoulder Press",
+      "slug": "machine-shoulder-press"
+    },
+    {
+      "number": 39,
+      "exercise": "Machine Standing Calf Raise",
+      "slug": "machine-standing-calf-raise"
+    },
+    {
+      "number": 40,
+      "exercise": "Mini Band Clamshell",
+      "slug": "mini-band-clamshell"
+    },
+    {
+      "number": 41,
+      "exercise": "Mini Band Hip Lifted Clamshell",
+      "slug": "mini-band-hip-lifted-clamshell"
+    },
+    {
+      "number": 42,
+      "exercise": "Mini Band Lateral Squat Walk",
+      "slug": "mini-band-lateral-walk"
+    },
+    {
+      "number": 43,
+      "exercise": "Mini Band Single Leg Glute Bridge",
+      "slug": "mini-band-single-leg-bridge"
+    },
+    {
+      "number": 44,
+      "exercise": "Mini Band Squat",
+      "slug": "mini-band-squat"
+    },
+    {
+      "number": 45,
+      "exercise": "Mini Band Standing Hip Abduction",
+      "slug": "mini-band-hip-abduction"
+    },
+    {
+      "number": 46,
+      "exercise": "Neutral Grip Lat Pulldown",
+      "slug": "neutral-lat-pulldown"
+    },
+    {
+      "number": 47,
+      "exercise": "Pass Through",
+      "slug": "pass-through"
+    },
+    {
+      "number": 48,
+      "exercise": "Plank",
+      "slug": "plank-high"
+    },
+    {
+      "number": 49,
+      "exercise": "Reverse Lunge",
+      "slug": "reverse-lunge"
+    },
+    {
+      "number": 50,
+      "exercise": "Romanian Deadlift",
+      "slug": "romanian-deadlift"
+    },
+    {
+      "number": 51,
+      "exercise": "Russian Twist",
+      "slug": "russian-twist"
+    },
+    {
+      "number": 52,
+      "exercise": "Single Kettlebell Overhead March",
+      "slug": "kb-overhead-march"
+    },
+    {
+      "number": 53,
+      "exercise": "Single Leg Glute Bridge",
+      "slug": "single-leg-glute-bridge"
+    },
+    {
+      "number": 54,
+      "exercise": "Single Seated Leg Press",
+      "slug": "single-seated-leg-press"
+    },
+    {
+      "number": 55,
+      "exercise": "Single-arm Dumbbell Row",
+      "slug": "single-arm-db-row"
+    },
+    {
+      "number": 56,
+      "exercise": "Smith Machine Back Squat",
+      "slug": "smith-back-squat"
+    },
+    {
+      "number": 57,
+      "exercise": "Smith Machine Deadlift",
+      "slug": "smith-deadlift"
+    },
+    {
+      "number": 58,
+      "exercise": "Smith Machine Split Squat",
+      "slug": "smith-split-squat"
+    },
+    {
+      "number": 59,
+      "exercise": "Stability Lunge",
+      "slug": "stability-lunge"
+    },
+    {
+      "number": 60,
+      "exercise": "Standing Banded Clamshell",
+      "slug": "standing-banded-clamshell"
+    },
+    {
+      "number": 61,
+      "exercise": "Superband Pull Apart",
+      "slug": "superband-pull-apart"
+    }
+  ],
+  "colors": {
+    "ink": "#4A372E",
+    "terracotta": "#A9502F",
+    "cream": "#FBF7EF",
+    "backdrop": "#F6E7D7",
+    "equipment_tint": "#E3CDB4"
+  }
+}
