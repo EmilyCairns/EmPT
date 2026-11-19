@@ -3121,7 +3121,7 @@ async function renderWorkoutPage() {
     const els = sec.items.map(({ i }) => blocks.find((b) => b.i === i).el);
     if (!sec.group) { els[0].classList.add('wp-section'); return els[0]; }
     return h('section', { class: 'log-group wp-section' },
-      h('p', { class: 'group-head' }, ['Superset', sec.rounds ? plural(Number(sec.rounds) || sec.rounds, 'round') : null].filter(Boolean).join(' · ')),
+      h('p', { class: 'group-head' }, [`Superset ${(labels[sec.items[0].i] || '').replace(/\d+$/, '')}`.trim(), sec.rounds ? plural(Number(sec.rounds) || sec.rounds, 'round') : null].filter(Boolean).join(' · ')),
       h('p', { class: 'group-how' }, sec.rest ? `Do these back to back, then rest ${restLabel(sec.rest)}.` : 'Do these back to back.'),
       els);
   });
