@@ -2948,7 +2948,7 @@ async function renderWorkoutPage() {
   const warmups = sections.filter((sec) => sec.warmup);
   warmupDone = !!(draft?.warmupDone ?? (done || existing.length > 0));
   const warmupTick = h('input', { type: 'checkbox', checked: warmupDone || null, onchange: (ev) => { warmupDone = ev.target.checked; warmupCard?.classList.toggle('is-done', warmupDone); persist(); showProgress(); } });
-  warmupCard = warmups.length ? h('section', { class: 'log-warmup' + (warmupDone ? ' is-done' : '') },
+  warmupCard = warmups.length ? h('section', { class: 'log-warmup wp-section' + (warmupDone ? ' is-done' : '') },
     h('p', { class: 'group-head' }, 'Warm up'),
     h('ul', { class: 'warmup-list' }, warmups.flatMap((sec) => sec.items).map(({ e }) => h('li', {},
       exerciseIcon(e, 'ex-icon sm') || h('span'),
@@ -2975,7 +2975,10 @@ async function renderWorkoutPage() {
     const timed = isTimed(e) && !e.load && !(Number(e.pct) > 0);
     const noKg = timed || !usesWeight(e);
 
-    const setsEl = h('div', { class: 'set-rows' + (barbell ? ' with-bar' : '') + (noKg ? ' no-kg' : '') });
+    // Rest sits in the table, next to the reps. In a superset only the last
+    // exercise has it (the others go straight on).
+    const restText = restAfter ? String(restAfter).trim() : '';
+    const setsEl = h('div', { class: 'set-rows' + (barbell ? ' with-bar' : '') + (noKg ? ' no-kg' : '') + (restText ? ' with-rest' : '') });
     // A set counts as done once it has reps: no tick needed. Entering the
     // reps for a set the first time also starts the rest timer.
     const hasReps = (r) => r.reps !== '' && r.reps != null;
@@ -2999,13 +3002,15 @@ async function renderWorkoutPage() {
     const lastText = (l) => (l ? [l.weight_kg != null ? `${Number(l.weight_kg)}` : null, l.reps != null ? `${l.reps}` : null].filter(Boolean).join(noKg ? '' : '×') || '–' : '–');
     const draw = () => fill(setsEl,
       h('div', { class: 'set-row set-head', 'aria-hidden': 'true' },
-        h('span', {}, '#'), h('span', { class: 'set-last' }, 'Last'), noKg ? null : h('span', {}, 'kg'), h('span', {}, timed ? 'Secs' : 'Reps'), barbell ? h('span') : null),
+        h('span', {}, '#'), h('span', { class: 'set-last' }, 'Last'), noKg ? null : h('span', {}, 'kg'), h('span', {}, timed ? 'Secs' : 'Reps'), restText ? h('span', {}, 'Rest') : null, barbell ? h('span') : null),
       ...rows.map((r, j) => h('div', { class: 'set-row' + (hasReps(r) ? ' done' : '') },
         h('span', { class: 'set-num' }, String(j + 1)),
         // What they did on this set last time.
         h('span', { class: 'set-last', title: previous?.[j] ? `Last time: ${prevSetText(previous[j], false)}` : 'Not done before' }, lastText(previous?.[j])),
         noKg ? null : num(r, 'weight', planKg, '0.5', `${e.name} set ${j + 1} weight in kg`),
         num(r, 'reps', planReps, '1', `${e.name} set ${j + 1} ${timed ? 'seconds' : 'reps'}`),
+        // Tap the rest to start the timer by hand.
+        restText ? h('button', { type: 'button', class: 'rest-btn', 'aria-label': `Start a ${restLabel(restText)} rest`, onclick: () => timer.start(rest || undefined) }, restText) : null,
         // Barbell lifts: tap the bar to see how to load this set's weight.
         barbell ? h('button', {
           type: 'button',
@@ -3038,10 +3043,9 @@ async function renderWorkoutPage() {
           h('h2', { class: 'ex-line' },
             h('span', { class: 'ex-slot', 'aria-hidden': 'true' }, label),
             h('button', { type: 'button', class: 'ex-name', 'aria-label': `${e.name}: see your history for this lift`, onclick: () => openLiftHistory(e, ctx) }, e.name)),
-          what || weight || (!extraClass && e.rest) ? h('p', { class: 'ex-rx' },
+          what || weight ? h('p', { class: 'ex-rx' },
             what ? h('span', { class: 'ex-sr' }, what) : null,
-            weight ? h('span', { class: 'ex-kg' }, weight) : null,
-            !extraClass && e.rest ? h('span', { class: 'ex-rest' }, `rest ${e.rest}`) : null) : null,
+            weight ? h('span', { class: 'ex-kg' }, weight) : null) : null,
           e.notes ? h('p', { class: 'ex-notes' }, e.notes) : null,
           target?.missing ? h('p', { class: 'ex-target' }, targetText(target, null)) : null,
           infoBtn),
@@ -3115,11 +3119,11 @@ async function renderWorkoutPage() {
   const sectionEls = sections.map((sec) => {
     if (sec.warmup) { if (warmupShown) return null; warmupShown = true; return warmupCard; }
     const els = sec.items.map(({ i }) => blocks.find((b) => b.i === i).el);
-    if (!sec.group) return els[0];
-    return h('section', { class: 'log-group' },
+    if (!sec.group) { els[0].classList.add('wp-section'); return els[0]; }
+    return h('section', { class: 'log-group wp-section' },
       h('p', { class: 'group-head' }, ['Superset', sec.rounds ? plural(Number(sec.rounds) || sec.rounds, 'round') : null].filter(Boolean).join(' · ')),
-      els,
-      h('p', { class: 'group-rest' }, sec.rest ? `Rest ${restLabel(sec.rest)} after each round` : 'Go straight into the next round'));
+      h('p', { class: 'group-how' }, sec.rest ? `Do these back to back, then rest ${restLabel(sec.rest)}.` : 'Do these back to back.'),
+      els);
   });
 
   mountClient(header(), h('main', { class: 'client-main workout-page' },
@@ -3130,7 +3134,7 @@ async function renderWorkoutPage() {
     h('h1', {}, w.title),
     w.notes ? h('p', { class: 'lead' }, w.notes) : null,
     exercises.length ? progress : null,
-    exercises.length ? h('div', { class: 'card wp-list' }, sectionEls) : h('p', { class: 'muted' }, 'This workout has no exercises listed.'),
+    exercises.length ? h('div', { class: 'wp-list' }, sectionEls) : h('p', { class: 'muted' }, 'This workout has no exercises listed.'),
     effortCard,
     comment ? h('section', { class: 'card' }, field(`Comments for ${TRAINER_NAME} (optional)`, comment)) : null,
     h('div', { class: 'row-end actions workout-finish' }, saveBtn, finishBtn),
