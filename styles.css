@@ -1528,9 +1528,10 @@ button.link:focus-visible { outline: var(--border-width-strong) solid var(--colo
 .wp-progress-text { white-space: nowrap; }
 .wp-progress-bar { flex: 1; height: var(--space-2); border-radius: var(--radius-pills); background: var(--color-surface-raised); overflow: hidden; }
 .wp-progress-fill { display: block; height: 100%; width: 0; border-radius: var(--radius-pills); background: var(--color-accent); transition: width var(--motion-fast); }
-/* The whole workout is one card; each part is split by a hairline. */
-.workout-page .card.wp-list { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
-.wp-list > * + * { border-top: var(--border-width) solid var(--color-border); }
+/* Each part (one exercise, a superset, the warm-up) is its own card, with
+   the page showing between them, so it's clear what's done alone. */
+.wp-list { display: flex; flex-direction: column; gap: var(--space-3); }
+.wp-section { border-radius: var(--radius-cards); background: var(--color-surface-raised); overflow: hidden; }
 /* One exercise, ROCC-style: a small label pill, the name, one line of what
    to do, then a compact table (# · Last · kg · Reps). */
 .log-ex { padding: var(--space-4) var(--space-5); }
@@ -1548,7 +1549,6 @@ button.link:focus-visible { outline: var(--border-width-strong) solid var(--colo
 .ex-rx { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-3); margin: var(--space-1) 0 0; font-size: var(--text-body-sm); }
 .ex-sr { font-family: var(--font-mono); color: var(--color-text); }
 .ex-kg { color: var(--color-accent-text); font-weight: var(--weight-semibold); }
-.ex-rest { color: var(--color-text-muted); }
 /* The trainer's notes: terracotta italics, so they read as her voice. */
 .workout-page .log-ex .ex-notes, .warmup-list .ex-notes { margin: var(--space-1) 0 0; color: var(--color-accent-text); font-size: var(--text-body-sm); font-style: italic; }
 .ex-info-btn { display: block; margin-top: var(--space-1); }
@@ -1562,10 +1562,15 @@ button.link:focus-visible { outline: var(--border-width-strong) solid var(--colo
 .ex-info p { margin: 0 0 var(--space-2); }
 /* The set table: small rows, numbers right where you type. */
 .workout-page .set-rows { gap: var(--space-1); margin: var(--space-3) 0 0; }
+/* Columns: # · Last · kg · Reps · Rest · (plates). */
 .workout-page .set-row { grid-template-columns: var(--space-6) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-2); }
+.workout-page .set-rows.with-rest .set-row { grid-template-columns: var(--space-6) minmax(0, 0.9fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.9fr); }
 .workout-page .set-rows.with-bar .set-row { grid-template-columns: var(--space-6) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) var(--control-height-sm); }
-.workout-page .set-rows.no-kg .set-row { grid-template-columns: var(--space-6) minmax(0, 1fr) minmax(0, 2fr); }
-.workout-page .set-rows.no-kg .set-row input { max-width: calc(var(--space-20) + var(--space-8)); }
+.workout-page .set-rows.with-rest.with-bar .set-row { grid-template-columns: var(--space-6) minmax(0, 0.8fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.9fr) var(--control-height-sm); }
+.workout-page .set-rows.no-kg .set-row { grid-template-columns: var(--space-6) minmax(0, 1fr) minmax(0, 1fr); }
+.workout-page .set-rows.no-kg.with-rest .set-row { grid-template-columns: var(--space-6) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); }
+.rest-btn { height: var(--control-height-sm); min-width: 0; padding: 0 var(--space-1); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-nav); background: none; color: var(--color-text-muted); font: inherit; font-size: var(--text-body-sm); cursor: pointer; }
+.rest-btn:hover { border-color: var(--color-accent); color: var(--color-accent-text); }
 .workout-page .set-head { font-size: var(--text-eyebrow); }
 .workout-page .set-num { font-family: var(--font-mono); font-size: var(--text-mono); color: var(--color-text-muted); }
 .workout-page .set-row.done .set-num { color: var(--color-accent-text); }
@@ -1581,7 +1586,7 @@ button.link:focus-visible { outline: var(--border-width-strong) solid var(--colo
 .group-head { margin: 0; padding: var(--space-3) var(--space-5) 0 calc(var(--space-5) - var(--space-1)); color: var(--color-accent-text); font-size: var(--text-eyebrow); font-weight: var(--weight-semibold); text-transform: uppercase; }
 .log-group .log-ex { padding-left: calc(var(--space-5) - var(--space-1)); }
 .log-group .log-ex + .log-ex { border-top: var(--border-width) dashed var(--color-border); }
-.group-rest { margin: 0; padding: 0 var(--space-5) var(--space-3) calc(var(--space-5) - var(--space-1)); color: var(--color-text-muted); font-size: var(--text-body-sm); }
+.group-how { margin: 0; padding: var(--space-1) var(--space-5) 0 calc(var(--space-5) - var(--space-1)); color: var(--color-text-muted); font-size: var(--text-body-sm); }
 /* Warm-up: one card listing what to do, with a single tick. Nothing to log. */
 .log-warmup { padding: 0 var(--space-5) var(--space-4) 0; }
 .log-warmup .warmup-list, .log-warmup .warmup-tick { padding-left: calc(var(--space-5) - var(--space-1)); }
