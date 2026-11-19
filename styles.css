@@ -1530,8 +1530,11 @@ button.link:focus-visible { outline: var(--border-width-strong) solid var(--colo
 .wp-progress-fill { display: block; height: 100%; width: 0; border-radius: var(--radius-pills); background: var(--color-accent); transition: width var(--motion-fast); }
 /* Each part (one exercise, a superset, the warm-up) is its own card, with
    the page showing between them, so it's clear what's done alone. */
-.wp-list { display: flex; flex-direction: column; gap: var(--space-3); }
-.wp-section { border-radius: var(--radius-cards); background: var(--color-surface-raised); overflow: hidden; }
+.wp-list { display: flex; flex-direction: column; gap: var(--space-6); }
+.wp-section { border: var(--border-width) solid var(--color-border); border-radius: var(--radius-cards); background: var(--color-surface-raised); overflow: hidden; }
+/* Supersets get a full terracotta outline (plus the bar down the left), so
+   two supersets in a row never look like one. */
+.wp-section.log-group { border: var(--border-width-strong) solid var(--color-accent); border-left-width: var(--space-1); }
 /* One exercise, ROCC-style: a small label pill, the name, one line of what
    to do, then a compact table (# · Last · kg · Reps). */
 .log-ex { padding: var(--space-4) var(--space-5); }
