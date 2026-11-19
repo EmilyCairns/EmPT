@@ -68,6 +68,8 @@ function h(tag, attrs = {}, ...children) {
 // replaceChildren() would print null as text, so drop empty slots first.
 const fill = (el, ...nodes) => el.replaceChildren(...nodes.flat(Infinity).filter((n) => n != null && n !== false));
 const mount = (...nodes) => fill($app, ...nodes);
+// Client pages also get the page bar along the bottom.
+const mountClient = (...nodes) => mount(...nodes, clientNav());
 const field = (label, input, hint) =>
   h('label', { class: 'field' }, h('span', { class: 'field-label' }, label), input, hint ? h('span', { class: 'muted small' }, hint) : null);
 
@@ -142,6 +144,37 @@ function tabs(items, onChange) {
         'aria-selected': String(state.tab === key),
         onclick: () => { if (state.tab !== key) { state.tab = key; onChange(); } },
       }, label)));
+}
+
+// The client's pages, always along the bottom of the screen. Leaving a
+// workout this way keeps what they've entered (it's saved on the device).
+function clientNav() {
+  const items = [
+    ['home', 'home', 'Home', unseenNotices()],
+    ['calendar', 'calendar', 'Calendar'],
+    ['program', 'dumbbell', 'Program'],
+    ['progress', 'chart', 'Progress'],
+    ['chat', 'chat', 'Chat'],
+  ];
+  const inside = state.activeWorkout || state.activeProgram;
+  return h('nav', { class: 'bottom-nav', role: 'tablist', 'aria-label': 'Pages' },
+    items.map(([key, iconName, label, dot]) => {
+      const active = !inside && state.tab === key;
+      return h('button', {
+        class: 'bottom-tab' + (active ? ' active' : ''),
+        role: 'tab',
+        'aria-selected': String(active),
+        onclick: () => {
+          state.tab = key;
+          const leavePage = state.leavePage;
+          state.leavePage = null;
+          if (leavePage) return leavePage();
+          state.activeWorkout = null;
+          state.activeProgram = null;
+          renderClientApp();
+        },
+      }, icon(iconName), h('span', {}, label), dot ? h('span', { class: 'dot', title: 'New post' }) : null);
+    }));
 }
 
 function header() {
@@ -1581,6 +1614,7 @@ function workoutCard(w, { actions = [], onChange, trainerFor, maxes = [], logs =
 
 function renderClientApp() {
   closeChat();
+  state.leavePage = null;
   // The health form comes first, before anything else in the app.
   if (state.health && !state.health.completed_at) return renderHealthForm({ first: true });
   if (state.editHealth) return renderHealthForm({ first: false });
@@ -1592,16 +1626,7 @@ function renderClientApp() {
   const body = h('div', { class: 'tab-body' });
   mount(header(), h('main', { class: 'client-main' },
     h('h1', {}, 'Hi ', h('em', {}, firstName(state.me.full_name))),
-    tabs([
-      // Short labels so all five tabs fit on a phone. Notices live on Home
-      // (with a "See all" link), so they don't need a tab of their own.
-      ['home', ['Home', unseenNotices() ? h('span', { class: 'dot', title: 'New post' }) : null]],
-      ['calendar', 'Calendar'],
-      ['program', 'Program'],
-      ['progress', 'Progress'],
-      ['chat', 'Chat'],
-    ].filter(Boolean), renderClientApp),
-    body));
+    body), clientNav());
   if (state.tab === 'home' || (state.tab === 'notices' && !state.notices) || (state.tab === 'wins' && !state.community)) renderClientHome(body);
   else if (state.tab === 'wins') renderClientWins(body);
   else if (state.tab === 'calendar') renderClientCalendar(body);
@@ -1910,6 +1935,8 @@ const ICONS = {
   chart: ['M4 20h16', 'M6 20v-6', 'M11 20V9', 'M16 20v-9', 'M5 10l5-4l4 3l5-5'],
   dumbbell: ['M5 7h3v10H5z', 'M16 7h3v10h-3z', 'M2.5 10v4', 'M21.5 10v4', 'M8 12h8'],
   person: ['M12 4a4 4 0 1 1 0 8a4 4 0 1 1 0-8', 'M4 21a8 8 0 0 1 16 0'],
+  home: ['M4 11l8-7l8 7', 'M6 9.5V20h12V9.5', 'M10 20v-5h4v5'],
+  chat: ['M4 5h16v11H9l-5 4z'],
   sun: ['M12 8a4 4 0 1 1 0 8a4 4 0 1 1 0-8', 'M12 2v2', 'M12 20v2', 'M2 12h2', 'M20 12h2', 'M4.9 4.9l1.4 1.4', 'M17.7 17.7l1.4 1.4', 'M4.9 19.1l1.4-1.4', 'M17.7 6.3l1.4-1.4'],
   alert: ['M12 3.5l9.5 17h-19z', 'M12 10v5', 'M12 18v.01'],
   cake: ['M4 21h16', 'M5 21v-7h14v7', 'M5 16.5c2.3 1.4 4.7 1.4 7 0s4.7-1.4 7 0', 'M12 14v-4', 'M12 6.5v.01', 'M8 14v-3', 'M16 14v-3'],
@@ -2851,7 +2878,7 @@ document.addEventListener('visibilitychange', () => { if (state.activeWorkout) k
 async function renderWorkoutPage() {
   const id = state.activeWorkout;
   const clientId = state.me.id;
-  mount(header(), h('main', { class: 'client-main workout-page' }, h('p', { class: 'muted' }, 'Loading…')));
+  mountClient(header(), h('main', { class: 'client-main workout-page' }, h('p', { class: 'muted' }, 'Loading…')));
   const [{ data: w, error }, ctx] = await Promise.all([
     sb.from('workouts').select('*').eq('id', id).maybeSingle(),
     loadTrainingData(clientId),
@@ -2867,12 +2894,14 @@ async function renderWorkoutPage() {
   const timer = restTimer();
   keepAwake(true);
   const leave = () => {
+    state.leavePage = null;
     page.abort();
     timer.destroy();
     keepAwake(false);
     state.activeWorkout = null;
     renderClientApp();
   };
+  state.leavePage = leave;
 
   const exercises = Array.isArray(w.exercises) ? w.exercises : [];
   const done = !!w.completed_at;
@@ -2997,22 +3026,26 @@ async function renderWorkoutPage() {
     const info = hasInfo ? howTo(e) : null;
     if (info) info.classList.add('ex-info');
     const infoBtn = info ? h('button', {
-      type: 'button', class: 'mini-btn', 'aria-expanded': 'false',
-      onclick: () => { info.open = !info.open; infoBtn.setAttribute('aria-expanded', String(info.open)); infoBtn.classList.toggle('on', info.open); },
-    }, 'Info') : null;
+      type: 'button', class: 'link-btn ex-info-btn', 'aria-expanded': 'false',
+      onclick: () => { info.open = !info.open; infoBtn.setAttribute('aria-expanded', String(info.open)); infoBtn.textContent = info.open ? 'Hide how to' : 'How to ›'; },
+    }, 'How to ›') : null;
+    // Always the same three lines beside the picture: the name (bold), what
+    // to do, then the trainer's notes (terracotta italics).
     const el = h('section', { class: `log-ex ${extraClass}`.trim() },
       h('div', { class: 'ex-top' },
-        exerciseIcon(e),
-        h('span', { class: 'ex-slot', 'aria-hidden': 'true' }, label),
-        h('h2', {}, h('button', { type: 'button', class: 'ex-name', 'aria-label': `${e.name}: see your history for this lift`, onclick: () => openLiftHistory(e, ctx) }, e.name)),
-        infoBtn,
+        exerciseIcon(e) || h('span', { class: 'ex-icon' }),
+        h('div', { class: 'ex-main' },
+          h('h2', { class: 'ex-line' },
+            h('span', { class: 'ex-slot', 'aria-hidden': 'true' }, label),
+            h('button', { type: 'button', class: 'ex-name', 'aria-label': `${e.name}: see your history for this lift`, onclick: () => openLiftHistory(e, ctx) }, e.name)),
+          what || weight || (!extraClass && e.rest) ? h('p', { class: 'ex-rx' },
+            what ? h('span', { class: 'ex-sr' }, what) : null,
+            weight ? h('span', { class: 'ex-kg' }, weight) : null,
+            !extraClass && e.rest ? h('span', { class: 'ex-rest' }, `rest ${e.rest}`) : null) : null,
+          e.notes ? h('p', { class: 'ex-notes' }, e.notes) : null,
+          target?.missing ? h('p', { class: 'ex-target' }, targetText(target, null)) : null,
+          infoBtn),
         status),
-      what || weight || (!extraClass && e.rest) ? h('p', { class: 'ex-rx' },
-        what ? h('span', { class: 'ex-sr' }, what) : null,
-        weight ? h('span', { class: 'ex-kg' }, weight) : null,
-        !extraClass && e.rest ? h('span', { class: 'ex-rest' }, `rest ${e.rest}`) : null) : null,
-      target?.missing ? h('p', { class: 'ex-target' }, targetText(target, null)) : null,
-      e.notes ? h('p', { class: 'ex-notes' }, e.notes) : null,
       info,
       setsEl,
       h('div', { class: 'ex-actions' },
@@ -3089,7 +3122,7 @@ async function renderWorkoutPage() {
       h('p', { class: 'group-rest' }, sec.rest ? `Rest ${restLabel(sec.rest)} after each round` : 'Go straight into the next round'));
   });
 
-  mount(header(), h('main', { class: 'client-main workout-page' },
+  mountClient(header(), h('main', { class: 'client-main workout-page' },
     h('div', { class: 'row-between wp-top' },
       h('button', { class: 'btn ghost small back-link', onclick: leave }, '← Back'),
       h('button', { class: 'btn ghost small', onclick: () => timer.start() }, 'Rest timer')),
@@ -3727,11 +3760,12 @@ function openScheduleDialog(c, pr, refresh) {
 // Client: the overview of a program, and picking training days.
 async function renderProgramPage() {
   const id = state.activeProgram;
-  mount(header(), h('main', { class: 'client-main program-page' }, h('p', { class: 'muted' }, 'Loading…')));
+  mountClient(header(), h('main', { class: 'client-main program-page' }, h('p', { class: 'muted' }, 'Loading…')));
   state.myPrograms = await loadPrograms(state.me.id);
   if (state.activeProgram !== id) return;
   const pr = state.myPrograms?.find((p) => p.id === id);
-  const leave = () => { state.activeProgram = null; renderClientApp(); };
+  const leave = () => { state.leavePage = null; state.activeProgram = null; renderClientApp(); };
+  state.leavePage = leave;
   if (!pr) { toast('That program is no longer available.', true); return leave(); }
   const n = pr.days_per_week;
   const total = pr.weeks * n;
@@ -3742,7 +3776,7 @@ async function renderProgramPage() {
     const list = ws || [];
     const { current } = sortPrograms(state.myPrograms, list);
     const isCurrent = current?.p.id === pr.id;
-    mount(header(), h('main', { class: 'client-main program-page' },
+    mountClient(header(), h('main', { class: 'client-main program-page' },
       h('button', { class: 'btn ghost small back-link', onclick: leave }, '← Back'),
       h('p', { class: 'eyebrow' }, isCurrent ? 'Your program' : 'Past program'),
       h('h1', {}, pr.title),
@@ -3773,7 +3807,7 @@ async function renderProgramPage() {
       sp.el,
       add);
   }
-  mount(header(), h('main', { class: 'client-main program-page' },
+  mountClient(header(), h('main', { class: 'client-main program-page' },
     h('button', { class: 'btn ghost small back-link', onclick: leave }, '← Back'),
     h('p', { class: 'eyebrow' }, `New program from ${TRAINER_NAME}`),
     h('h1', {}, pr.title),

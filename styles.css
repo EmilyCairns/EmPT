@@ -1522,7 +1522,6 @@ button.link:focus-visible { outline: var(--border-width-strong) solid var(--colo
 .login-foot { margin-top: var(--space-6); text-align: center; }
 
 /* ---- Workout page: one clean list, like a printed program --------------- */
-.workout-page { padding-bottom: calc(var(--space-20) + var(--space-12)); }
 .wp-top { margin: 0 0 var(--space-4); }
 .wp-top .back-link { margin: 0; }
 .wp-progress { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-4) 0 var(--space-5); color: var(--color-text-muted); font-size: var(--text-body-sm); font-weight: var(--weight-semibold); }
@@ -1535,9 +1534,11 @@ button.link:focus-visible { outline: var(--border-width-strong) solid var(--colo
 /* One exercise, ROCC-style: a small label pill, the name, one line of what
    to do, then a compact table (# · Last · kg · Reps). */
 .log-ex { padding: var(--space-4) var(--space-5); }
-.ex-top { display: flex; align-items: center; gap: var(--space-2); }
-.workout-page .log-ex h2 { flex: 1; min-width: 0; margin: 0; font: inherit; }
-.ex-slot { flex-shrink: 0; min-width: var(--space-6); padding: calc(var(--space-1) / 2) var(--space-2); border-radius: var(--radius-pills); background: var(--color-accent-wash); color: var(--color-accent-text); font-family: var(--font-mono); font-size: var(--text-mono); font-weight: var(--weight-semibold); text-align: center; }
+.ex-top { display: grid; grid-template-columns: var(--space-10) minmax(0, 1fr) auto; align-items: start; gap: var(--space-3); }
+.ex-main { min-width: 0; }
+.workout-page .log-ex h2.ex-line { display: flex; align-items: baseline; gap: var(--space-2); margin: 0; font: inherit; }
+.ex-line .ex-name { font-size: var(--text-body); }
+.ex-slot { flex-shrink: 0; align-self: center; min-width: var(--space-6); padding: calc(var(--space-1) / 2) var(--space-2); border-radius: var(--radius-pills); background: var(--color-accent-wash); color: var(--color-accent-text); font-family: var(--font-mono); font-size: var(--text-mono); font-weight: var(--weight-semibold); text-align: center; }
 .ex-name { padding: 0; border: 0; background: none; color: var(--color-text); font: inherit; font-weight: var(--weight-semibold); line-height: var(--leading-subheading); text-align: left; cursor: pointer; }
 .ex-name:hover { text-decoration: underline; }
 .ex-name:focus-visible { outline: var(--border-width-strong) solid var(--color-focus); outline-offset: var(--space-1); border-radius: var(--radius-nav); }
@@ -1548,9 +1549,15 @@ button.link:focus-visible { outline: var(--border-width-strong) solid var(--colo
 .ex-sr { font-family: var(--font-mono); color: var(--color-text); }
 .ex-kg { color: var(--color-accent-text); font-weight: var(--weight-semibold); }
 .ex-rest { color: var(--color-text-muted); }
-.workout-page .log-ex .ex-notes { margin: var(--space-1) 0 0; color: var(--color-text-muted); font-size: var(--text-body-sm); }
+/* The trainer's notes: terracotta italics, so they read as her voice. */
+.workout-page .log-ex .ex-notes, .warmup-list .ex-notes { margin: var(--space-1) 0 0; color: var(--color-accent-text); font-size: var(--text-body-sm); font-style: italic; }
+.ex-info-btn { display: block; margin-top: var(--space-1); }
 .workout-page .log-ex .ex-target { margin: var(--space-1) 0 0; }
 .ex-info > summary { display: none; }
+.ex-info:not([open]) { display: none; }
+.link-btn { padding: var(--space-1) 0; border: 0; background: none; color: var(--color-accent-text); font: inherit; font-size: var(--text-body-sm); font-weight: var(--weight-semibold); cursor: pointer; }
+.link-btn:hover { text-decoration: underline; }
+.link-btn:focus-visible { outline: var(--border-width-strong) solid var(--color-focus); outline-offset: var(--space-1); border-radius: var(--radius-nav); }
 .ex-info { margin-top: var(--space-2); padding: var(--space-3); border-radius: var(--radius-nav); background: var(--color-surface); font-size: var(--text-body-sm); }
 .ex-info p { margin: 0 0 var(--space-2); }
 /* The set table: small rows, numbers right where you type. */
@@ -1582,14 +1589,55 @@ button.link:focus-visible { outline: var(--border-width-strong) solid var(--colo
 .warmup-list { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
 .warmup-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); }
 .warmup-list .ex-meta { display: inline; }
-.warmup-list .ex-notes { flex-basis: 100%; margin: 0; color: var(--color-text-muted); }
 .warmup-tick { margin-top: var(--space-4); font-weight: var(--weight-semibold); }
 .log-warmup.is-done .warmup-list { opacity: 0.6; }
 /* Exercise pictures (icons/exercises/): 40px beside a name, smaller in the warm-up. */
 .ex-icon { flex-shrink: 0; width: var(--space-10); height: var(--space-10); }
 .ex-icon.sm { width: calc(var(--space-6) + var(--space-1)); height: calc(var(--space-6) + var(--space-1)); }
 .warmup-list li { display: grid; grid-template-columns: calc(var(--space-6) + var(--space-1)) 1fr; align-items: start; gap: var(--space-3); }
-.wu-text { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); }
+.wu-text { display: flex; flex-direction: column; }
+.wu-text .ex-meta { color: var(--color-text-muted); font-size: var(--text-body-sm); }
 .client-item.lib-item { display: grid; grid-template-columns: var(--space-10) 1fr; column-gap: var(--space-3); align-items: center; }
 .lib-item .lib-icon { grid-row: span 2; }
 .lib-item > :not(.lib-icon) { grid-column: 2; }
+
+/* ---- Client page bar: always along the bottom of the screen ------------- */
+.bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  padding: var(--space-1) max(var(--space-2), calc((100vw - var(--reading-max-width)) / 2)) calc(var(--space-1) + env(safe-area-inset-bottom));
+  border-top: var(--border-width) solid var(--color-border);
+  background: var(--color-surface);
+}
+.bottom-tab {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--space-1) / 2);
+  min-height: var(--bottom-nav-height);
+  justify-content: center;
+  padding: var(--space-1) 0;
+  border: 0;
+  border-radius: var(--radius-nav);
+  background: none;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--text-eyebrow);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+.bottom-tab .icon { width: var(--space-6); height: var(--space-6); }
+.bottom-tab.active { color: var(--color-accent-text); }
+.bottom-tab:focus-visible { outline: var(--border-width-strong) solid var(--color-focus); outline-offset: calc(-1 * var(--space-1)); }
+.bottom-tab .dot { position: absolute; top: var(--space-1); left: calc(50% + var(--space-2)); }
+/* Room at the bottom of every client page so nothing hides behind the bar. */
+.client-main { padding-bottom: calc(var(--bottom-nav-height) + var(--space-16) + env(safe-area-inset-bottom)); }
+.workout-page { padding-bottom: calc(var(--bottom-nav-height) + var(--space-20) + var(--space-12) + env(safe-area-inset-bottom)); }
+/* The rest timer floats just above the page bar. */
+.rest-bar { bottom: calc(var(--bottom-nav-height) + var(--space-4) + env(safe-area-inset-bottom)); }

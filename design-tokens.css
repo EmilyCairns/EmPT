@@ -146,6 +146,7 @@
   --control-height: 48px;     /* Buttons and inputs (12px + 24px line + 12px) */
   --control-height-sm: 40px;  /* Small buttons and icon buttons */
   --topbar-height: 64px;
+  --bottom-nav-height: 52px;  /* Client page bar along the bottom (Home, Calendar…) */
   --gutter: 24px;             /* Outer page padding (16px on small phones) */
   --page-max-width: 1280px;
   --sidebar-width: 320px;
