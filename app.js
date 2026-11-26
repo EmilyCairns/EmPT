@@ -545,6 +545,7 @@ function renderPanel() {
   if (state.view === 'notices') return renderNoticesPanel();
   if (state.view === 'calendar') return renderCalendarPanel();
   if (state.view === 'community') return renderCommunityPanel();
+  ui.panel.classList.toggle('panel-wide', state.view === 'today');
   if (state.view === 'today') return renderTodayPanel();
   const c = state.clients.find((x) => x.id === state.selectedId);
   if (!c) {
@@ -1053,12 +1054,13 @@ function openHighFive(c, stats) {
 // database doesn't have yet is simply treated as empty.
 async function loadOverview() {
   const quiet = (res) => (res.error ? (isMissingTable(res.error) ? [] : (toast(res.error.message, true), [])) : res.data);
-  const [wRes, eRes, mRes, fRes, pbRes] = await Promise.all([
+  const [wRes, eRes, mRes, fRes, pbRes, prRes] = await Promise.all([
     sb.from('workouts').select('id,client_id,title,workout_date,completed_at,is_draft,program_id,program_week'),
     sb.from('excused_weeks').select('client_id,week_start'),
-    sb.from('messages').select('client_id,sender,created_at').order('created_at', { ascending: false }).limit(1000),
+    sb.from('messages').select('client_id,sender,body,created_at').order('created_at', { ascending: false }).limit(1000),
     sb.from('workout_feedback').select('*'),
-    sb.from('client_maxes').select('client_id,exercise_id,reps,weight_kg,tested_on,source,created_at').eq('source', 'logged').order('created_at', { ascending: false }).limit(40),
+    sb.from('client_maxes').select('client_id,exercise_id,reps,weight_kg,tested_on,source,created_at').eq('source', 'logged').order('created_at', { ascending: false }).limit(200),
+    sb.from('programs').select('client_id,title,status,updated_at').eq('status', 'scheduled'),
   ]);
   if (wRes.error) { toast(wRes.error.message, true); state.overview = null; return; }
   const excused = new Map();
@@ -1075,7 +1077,116 @@ async function loadOverview() {
     lastMsg,
     feedback: new Map(quiet(fRes).map((f) => [f.workout_id, f])),
     pbs: quiet(pbRes),
+    messages: quiet(mRes),
+    programs: quiet(prRes),
   };
+}
+
+// The trainer's activity feed (like Trainerize's "Recent activities"):
+// everything clients have done lately, newest first.
+const FEED_DAYS = 14;
+const MILESTONES = [1, 10, 25, 50, 75, 100, 150, 200];
+function activityFeed() {
+  const o = state.overview;
+  if (!o) return [];
+  const since = new Date(Date.now() - FEED_DAYS * 864e5).toISOString();
+  const byId = new Map(state.clients.map((c) => [c.id, c]));
+  const exName = (id) => state.library.find((x) => x.id === id)?.name || 'a lift';
+  const ord = (n) => `${n}${n % 10 === 1 && n % 100 !== 11 ? 'st' : n % 10 === 2 && n % 100 !== 12 ? 'nd' : n % 10 === 3 && n % 100 !== 13 ? 'rd' : 'th'}`;
+  const items = [];
+  // Finished workouts, with effort, check-in, new bests and milestones.
+  const done = o.workouts.filter((w) => w.completed_at && !w.is_draft && byId.has(w.client_id)).sort((a, b) => a.completed_at.localeCompare(b.completed_at));
+  const count = new Map();
+  const usedPbs = new Set();
+  for (const w of done) {
+    const n = (count.get(w.client_id) || 0) + 1;
+    count.set(w.client_id, n);
+    if (w.completed_at < since) continue;
+    const fb = o.feedback.get(w.id);
+    const t = new Date(w.completed_at).getTime();
+    const pbs = o.pbs.filter((m) => m.client_id === w.client_id && Math.abs(new Date(m.created_at).getTime() - t) < 6 * 36e5);
+    pbs.forEach((m) => usedPbs.add(m));
+    const milestone = MILESTONES.includes(n) ? (n === 1 ? '1st workout ever!' : `${ord(n)} workout!`) : null;
+    items.push({
+      at: w.completed_at, c: byId.get(w.client_id), tab: 'workouts', kind: 'done',
+      text: [' finished ', h('b', {}, w.title)],
+      badge: milestone,
+      meta: [
+        fb?.effort ? `Effort ${fb.effort}/10` : null,
+        pbs.length ? `${plural(pbs.length, 'new best')}: ${pbs.map((m) => `${exName(m.exercise_id)} ${m.reps}RM ${kg(m.weight_kg)}`).join(', ')}` : null,
+        fb?.factors?.length ? fb.factors.map(factorLabel).join(', ') : null,
+      ].filter(Boolean).join(' · '),
+      quote: fb?.comment || null,
+    });
+  }
+  // New bests not tied to a finished workout (e.g. logged and saved for later).
+  for (const m of o.pbs) {
+    if (usedPbs.has(m) || m.created_at < since || !byId.has(m.client_id)) continue;
+    items.push({ at: m.created_at, c: byId.get(m.client_id), tab: 'lifts', kind: 'best', text: [' set a new ', h('b', {}, `${m.reps}RM`)], meta: `${exName(m.exercise_id)} ${kg(m.weight_kg)}` });
+  }
+  // Messages from clients (the latest one each day per client).
+  const seen = new Set();
+  for (const m of o.messages || []) {
+    if (m.sender !== 'client' || m.created_at < since || !byId.has(m.client_id)) continue;
+    const key = `${m.client_id}:${dayKey(new Date(m.created_at))}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    items.push({ at: m.created_at, c: byId.get(m.client_id), tab: 'chat', kind: 'message', text: [' sent you a message'], quote: m.body });
+  }
+  // Sessions the client cancelled.
+  for (const x of state.sessions || []) {
+    if (x.status !== 'cancelled' || x.cancelled_by !== 'client' || !x.cancelled_at || x.cancelled_at < since || !byId.has(x.client_id)) continue;
+    items.push({
+      at: x.cancelled_at, c: byId.get(x.client_id), tab: 'sessions', kind: 'cancel',
+      text: [' cancelled the session on ', h('b', {}, new Date(x.starts_at).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }))],
+      quote: x.cancel_reason || null,
+    });
+  }
+  // Health forms filled in.
+  for (const [id, hr] of state.healthByClient || []) {
+    if (!hr.completed_at || hr.completed_at < since || !byId.has(id)) continue;
+    items.push({ at: hr.completed_at, c: byId.get(id), tab: 'notes', kind: 'health', text: [' filled in the health form'], meta: hr.screening_flag ? 'Answered yes to a screening question: GP clearance needed before training' : null, warn: !!hr.screening_flag });
+  }
+  // Programs a client has put on their calendar.
+  for (const pr of o.programs || []) {
+    if (!pr.updated_at || pr.updated_at < since || !byId.has(pr.client_id)) continue;
+    items.push({ at: pr.updated_at, c: byId.get(pr.client_id), tab: 'workouts', kind: 'program', text: [' started ', h('b', {}, pr.title)] });
+  }
+  return items.sort((a, b) => b.at.localeCompare(a.at));
+}
+
+// "Today 6:12 am", "Yesterday 5:01 pm", "Mon 23 Nov".
+function feedWhen(iso) {
+  const d = new Date(iso);
+  const k = dayKey(d);
+  const t = today();
+  if (k === t) return `Today ${timeText(d)}`;
+  if (k === addDays(t, -1)) return `Yesterday ${timeText(d)}`;
+  return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+}
+const initials = (name) => String(name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+
+function renderActivityFeed(open) {
+  const items = activityFeed();
+  let shown = 25;
+  const list = h('ol', { class: 'feed-list' });
+  const more = h('button', { type: 'button', class: 'btn ghost small feed-more', onclick: () => { shown += 25; draw(); } }, 'Show more');
+  function draw() {
+    fill(list, items.slice(0, shown).map((a) => h('li', {},
+      h('button', { type: 'button', class: 'feed-item' + (a.warn ? ' warn' : ''), onclick: () => open(a.c, a.tab) },
+        h('span', { class: 'feed-avatar', 'aria-hidden': 'true' }, initials(a.c.full_name)),
+        h('span', { class: 'feed-body' },
+          h('span', { class: 'feed-text' }, h('b', {}, a.c.full_name), ...a.text, a.badge ? h('span', { class: 'feed-badge' }, a.badge) : null),
+          a.meta ? h('span', { class: 'feed-meta' }, a.meta) : null,
+          a.quote ? h('span', { class: 'feed-quote' }, `“${a.quote.length > 140 ? `${a.quote.slice(0, 140)}…` : a.quote}”`) : null,
+          h('span', { class: 'feed-when' }, feedWhen(a.at)))))));
+    more.hidden = items.length <= shown;
+  }
+  draw();
+  return h('aside', { class: 'feed', 'aria-label': 'Recent activity' },
+    h('h3', { class: 'feed-title' }, 'Recent activity'),
+    items.length ? list : h('p', { class: 'muted small' }, `Nothing in the last ${FEED_DAYS} days yet. Finished workouts, new bests, messages and more show up here.`),
+    more);
 }
 
 // Everything worth knowing about one client at a glance.
@@ -1192,33 +1303,13 @@ async function renderTodayPanel() {
     .filter((x) => x.items.length)
     .sort((a, b) => b.items.length - a.items.length || a.c.full_name.localeCompare(b.c.full_name));
 
-  // Recent activity: workouts finished and new bests in the last 7 days.
-  const since = addDays(todayK, -7);
-  const o = state.overview || { workouts: [], feedback: new Map(), pbs: [] };
-  const nameOf = (id) => clients.find((c) => c.id === id);
-  const exName = (id) => state.library.find((x) => x.id === id)?.name || 'a lift';
-  const activity = [
-    ...o.workouts.filter((w) => w.completed_at && dayKey(new Date(w.completed_at)) >= since && nameOf(w.client_id)).map((w) => {
-      const fb = o.feedback.get(w.id);
-      const notes = [
-        fb?.effort ? `Effort ${fb.effort}/10` : null,
-        fb?.factors?.length ? fb.factors.map(factorLabel).join(', ') : null,
-        fb?.comment ? `“${fb.comment.length > 70 ? `${fb.comment.slice(0, 70)}…` : fb.comment}”` : null,
-      ].filter(Boolean).join(' · ');
-      return { at: w.completed_at, kind: 'dumbbell', c: nameOf(w.client_id), title: `${firstName(nameOf(w.client_id).full_name)} finished ${w.title}`, meta: notes || null, tab: 'workouts' };
-    }),
-    ...o.pbs.filter((m) => m.tested_on >= since && nameOf(m.client_id)).map((m) => ({
-      at: m.created_at, kind: 'trophy', c: nameOf(m.client_id),
-      title: `${firstName(nameOf(m.client_id).full_name)}: new ${m.reps}RM`, meta: `${exName(m.exercise_id)} ${kg(m.weight_kg)}`, tab: 'lifts',
-    })),
-  ].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 15);
-
   fill(ui.panel,
     h('div', { class: 'panel-head' },
       h('button', { class: 'btn ghost small back', onclick: () => { state.view = 'client'; renderClientList(); renderPanel(); } }, '← Clients'),
       h('div', { class: 'panel-title' },
         h('h2', {}, `Good ${hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'}, `, h('em', {}, TRAINER_NAME)),
         h('p', { class: 'muted small' }, dateOf(todayK).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })))),
+    h('div', { class: 'today-layout' },
     h('div', { class: 'home today-panel' },
       homeSection('Today', state.sessions ? h('button', { class: 'btn ghost small', onclick: () => { state.view = 'calendar'; renderClientList(); renderPanel(); } }, 'Calendar') : null, 'sun',
         todayRows.length ? h('ul', { class: 'home-list' }, todayRows) : h('p', { class: 'muted small' }, 'No sessions or birthdays today.')),
@@ -1227,13 +1318,8 @@ async function renderTodayPanel() {
           ? h('ul', { class: 'home-list' }, attention.map(({ c, items }) => homeRow({
               title: c.full_name, meta: items.map(([label]) => label).join(' · '), onclick: () => open(c, items[0][1]),
             })))
-          : h('p', { class: 'muted small' }, 'All caught up. Nobody needs anything from you right now.')),
-      homeSection('Recent activity', null, 'chart',
-        activity.length
-          ? h('ul', { class: 'home-list' }, activity.map((a) => homeRow({
-              kind: a.kind, when: dayShort(dayKey(new Date(a.at))), title: a.title, meta: a.meta, onclick: () => open(a.c, a.tab),
-            })))
-          : h('p', { class: 'muted small' }, 'Nothing in the last 7 days yet.'))));
+          : h('p', { class: 'muted small' }, 'All caught up. Nobody needs anything from you right now.'))),
+    renderActivityFeed(open)));
 }
 
 // ---------------------------------------------------------------------------
