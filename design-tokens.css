@@ -151,6 +151,7 @@
   --page-max-width: 1280px;
   --sidebar-width: 320px;
   --content-max-width: 880px; /* Trainer's client panel */
+  --activity-width: 320px;    /* Trainer's Recent activity column on the Today page */
   --reading-max-width: 720px; /* Client's page */
   --dialog-width: 480px;
   --dialog-width-wide: 720px; /* Workout editor */

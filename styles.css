@@ -1649,3 +1649,31 @@ button.link:focus-visible { outline: var(--border-width-strong) solid var(--colo
 .workout-page { padding-bottom: calc(var(--bottom-nav-height) + var(--space-20) + var(--space-12) + env(safe-area-inset-bottom)); }
 /* The rest timer floats just above the page bar. */
 .rest-bar { bottom: calc(var(--bottom-nav-height) + var(--space-4) + env(safe-area-inset-bottom)); }
+
+/* ---- Trainer Today page: Recent activity feed down the right ------------- */
+.panel.panel-wide { max-width: none; }
+/* Two columns when there's room, one under the other when there isn't. */
+.today-layout { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-8); }
+.today-layout > .today-panel { flex: 999 1 0; min-width: min(100%, calc(var(--content-max-width) / 2)); }
+/* On a computer the feed stays in view while the page scrolls, like Trainerize's. */
+@media (min-width: 760px) {
+  .today-layout > .feed { position: sticky; top: calc(var(--topbar-height) + var(--space-4)); max-height: calc(100vh - var(--topbar-height) - var(--space-8)); overflow-y: auto; }
+}
+.today-layout > .feed { flex: 1 1 var(--activity-width); max-width: 100%; }
+.feed { padding: var(--space-5); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-cards); background: var(--color-surface-raised); }
+.feed-title { display: flex; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-3); }
+.feed-list { margin: 0; padding: 0; list-style: none; }
+.feed-list li + li { border-top: var(--border-width) solid var(--color-border); }
+.feed-item { display: grid; grid-template-columns: var(--space-8) minmax(0, 1fr); gap: var(--space-3); width: 100%; padding: var(--space-3) 0; border: 0; background: none; color: var(--color-text); font: inherit; text-align: left; cursor: pointer; }
+.feed-item:hover .feed-text b { text-decoration: underline; }
+.feed-item:focus-visible { outline: var(--border-width-strong) solid var(--color-focus); outline-offset: var(--space-1); border-radius: var(--radius-nav); }
+.feed-avatar { display: grid; place-items: center; width: var(--space-8); height: var(--space-8); border-radius: var(--radius-pills); background: var(--color-accent-wash); color: var(--color-accent-text); font-size: var(--text-eyebrow); font-weight: var(--weight-semibold); }
+.feed-body { display: flex; flex-direction: column; gap: calc(var(--space-1) / 2); min-width: 0; }
+.feed-text { font-size: var(--text-body-sm); overflow-wrap: anywhere; }
+.feed-text b { font-weight: var(--weight-semibold); }
+.feed-badge { display: inline-block; margin-left: var(--space-1); padding: 0 var(--space-2); border-radius: var(--radius-pills); background: var(--color-accent); color: var(--color-on-accent); font-size: var(--text-eyebrow); font-weight: var(--weight-semibold); }
+.feed-meta { color: var(--color-text-body); font-size: var(--text-body-sm); }
+.feed-item.warn .feed-meta { color: var(--color-danger); font-weight: var(--weight-semibold); }
+.feed-quote { color: var(--color-accent-text); font-size: var(--text-body-sm); font-style: italic; overflow-wrap: anywhere; }
+.feed-when { color: var(--color-text-muted); font-size: var(--text-eyebrow); }
+.feed-more { margin-top: var(--space-2); }
